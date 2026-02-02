@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Đèn chiếu sáng tự động</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; }
+    .wrap { max-width: 900px; margin: 0 auto; }
+    .top { display:flex; justify-content:space-between; align-items:flex-end; gap: 12px; flex-wrap: wrap; }
+    h1 { margin: 0; font-size: 22px; }
+    .muted { color:#666; font-size: 13px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+    .card { border: 1px solid #e6e6e6; border-radius: 14px; padding: 14px; background:#fff; }
+    .big { font-size: 44px; font-weight: 800; line-height: 1; }
+    .label { color:#666; font-size: 12px; margin-bottom: 6px; }
+    .row { display:flex; justify-content:space-between; gap: 12px; padding: 8px 0; border-top: 1px dashed #eee; }
+    .row:first-of-type { border-top: 0; }
+    .pill { display:inline-flex; align-items:center; gap:8px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 999px; font-size: 13px; }
+    .dot { width:10px; height:10px; border-radius:999px; background:#bbb; }
+    .ok { background:#22c55e; }
+    .bad { background:#ef4444; }
+
+    button { padding: 10px 12px; border-radius: 12px; border: 1px solid #ddd; background:#fff; cursor:pointer; }
+    button:hover { background:#fafafa; }
+    input[type="checkbox"] { transform: translateY(1px); }
+
+    @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+
+    /* ===== Bulb ===== */
+    .bulbWrap { margin-top: 10px; display:flex; align-items:center; gap: 12px; }
+    .bulb { width: 74px; height: 74px; flex: 0 0 auto; }
+    .bulb svg { width: 100%; height: 100%; display:block; }
+    .bulb .glass { transition: fill .15s ease, stroke .15s ease, filter .15s ease; }
+    .bulb .base  { fill: #e5e7eb; stroke: #cbd5e1; }
+    .bulb.on  .glass { fill: #22c55e; stroke: #16a34a; filter: drop-shadow(0 0 10px rgba(34,197,94,.45)); }
+    .bulb.off .glass { fill: #ffffff; stroke: #d1d5db; filter: none; }
+
+    .lampStateText { font-weight: 700; }
+    .lampStateText.on { color: #16a34a; }
+    .lampStateText.off { color: #111; }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>Đèn chiếu sáng tự động</h1>
+      </div>
+      <div class="pill" title="Trạng thái">
+        <span class="dot" id="dot"></span>
+        <span id="status">Đang khởi tạo…</span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <!-- CARD: Trạng thái ánh sáng -->
+      <div class="card">
+        <div class="label">Trạng thái ánh sáng</div>
+        <div class="big" id="lightText">--</div>
+
+        <!-- ✅ Bóng đèn ngay dưới -->
+        <div class="bulbWrap">
+          <div class="bulb off" id="bulb" aria-label="Lamp">
+            <svg viewBox="0 0 64 64" role="img">
+              <!-- glass -->
+              <path class="glass" d="M32 6c-10.5 0-19 8.5-19 19 0 7.2 3.9 12.2 7.6 15.9 2.6 2.6 4.4 4.8 4.8 8.1h13.2c.4-3.3 2.2-5.5 4.8-8.1C47.1 37.2 51 32.2 51 25 51 14.5 42.5 6 32 6z"/>
+              <!-- base -->
+              <path class="base" d="M23 49h18v4H23z"/>
+              <path class="base" d="M24 55h16v3H24z"/>
+            </svg>
+          </div>
+
+          <div class="muted">
+            <div>Trạng thái đèn:</div>
+            <div class="lampStateText off" id="lampStateText">--</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="label">Raw (từ ESP32)</div>
+          <div id="rawLight">--</div>
+        </div>
+
+        <div class="row">
+          <div class="label">Cập nhật lúc</div>
+          <div id="updatedAt">--</div>
+        </div>
+      </div>
+
+      <!-- CARD: Điều khiển đèn -->
+      <div class="card">
+        <div class="label">Điều khiển đèn</div>
+
+        <div class="row">
+          <div class="label">Auto control</div>
+          <div><b id="autoState">ON</b></div>
+        </div>
+
+        <div class="row">
+          <div class="label">Trạng thái đèn (cmd)</div>
+          <div><b id="ledState">--</b></div>
+        </div>
+
+        <div class="row">
+          <div class="label">INVERT (đảo sáng/tối)</div>
+          <div>
+            <label class="muted">
+              <input id="invert" type="checkbox" />
+              đảo logic D0
+            </label>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top: 12px; flex-wrap: wrap;">
+          <button id="btnToggleLed">Bật đèn</button>
+          <button id="btnAutoOn">Bật Auto</button>
+        </div>
+
+        <div class="muted" style="margin-top:10px;">
+          Auto: <b>TỐI</b> ⇒ bật đèn, <b>SÁNG</b> ⇒ tắt đèn.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import { getDatabase, ref, onValue, get, set } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCszb18BsaqZ2nUtPRiq96HT5zcdGLtnHg",
+      authDomain: "iott-eddfb.firebaseapp.com",
+      databaseURL: "https://iott-eddfb-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "iott-eddfb",
+    };
+
+    const PATH_DATA = "/esp32/data";
+    const PATH_CMD  = "/esp32/cmd/led"; // "1"(ON) / "2"(OFF)
+    const CMD_MIN_INTERVAL_MS = 200;
+
+    // UI
+    const dot = document.getElementById("dot");
+    const statusEl = document.getElementById("status");
+
+    const lightTextEl = document.getElementById("lightText");
+    const rawLightEl = document.getElementById("rawLight");
+    const updatedAtEl = document.getElementById("updatedAt");
+
+    const autoStateEl = document.getElementById("autoState");
+    const ledStateEl  = document.getElementById("ledState");
+    const invertEl    = document.getElementById("invert");
+
+    const btnToggleLed = document.getElementById("btnToggleLed");
+    const btnAutoOn    = document.getElementById("btnAutoOn");
+
+    const bulbEl = document.getElementById("bulb");
+    const lampStateTextEl = document.getElementById("lampStateText");
+
+    function setStatus(text, ok = null) {
+      statusEl.textContent = text;
+      dot.classList.remove("ok", "bad");
+      if (ok === true) dot.classList.add("ok");
+      if (ok === false) dot.classList.add("bad");
+    }
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const auth = getAuth(app);
+
+    // State
+    let autoEnabled = true;
+    let ledCmd = null;         // "1"/"2"
+    let lastCmdWrite = 0;
+    let lastLightIsDark = null;
+
+    function setAutoEnabled(on) {
+      autoEnabled = on;
+      autoStateEl.textContent = on ? "ON" : "OFF";
+    }
+
+    function normalizeCmd(v) {
+      if (v === "1" || v === 1 || v === true) return "1";
+      if (v === "2") return "2";
+      if (v === 0 || v === false) return "2";
+      return null;
+    }
+
+    function updateBulb() {
+      const isOn = (ledCmd ?? "2") === "1";
+      bulbEl.classList.toggle("on", isOn);
+      bulbEl.classList.toggle("off", !isOn);
+
+      lampStateTextEl.textContent = isOn ? "BẬT" : "TẮT";
+      lampStateTextEl.classList.toggle("on", isOn);
+      lampStateTextEl.classList.toggle("off", !isOn);
+    }
+
+    function updateToggleButton() {
+      const isOn = (ledCmd ?? "2") === "1";
+      btnToggleLed.textContent = isOn ? "Tắt đèn" : "Bật đèn";
+      updateBulb();
+    }
+
+    async function writeLedCmd(cmdStr) {
+      const cmd = normalizeCmd(cmdStr);
+      if (!cmd) return;
+
+      const now = Date.now();
+      if (ledCmd === cmd) return;
+      if (now - lastCmdWrite < CMD_MIN_INTERVAL_MS) return;
+
+      ledCmd = cmd;
+      lastCmdWrite = now;
+
+      ledStateEl.textContent = cmd;
+      updateToggleButton();
+
+      await set(ref(db, PATH_CMD), cmd);
+    }
+
+    // Light parsing: d0 hoặc light
+    function parseLight(val) {
+      if (!val) return { ok:false, raw:"null" };
+
+      if (val.d0 !== undefined && val.d0 !== null) {
+        let d0 = Number(val.d0);
+        if (Number.isNaN(d0)) return { ok:false, raw:String(val.d0) };
+
+        // chuẩn: d0=1 => sáng, d0=0 => tối
+        const isBright = invertEl.checked ? (d0 === 0) : (d0 === 1);
+        return { ok:true, raw:`d0=${d0}`, isDark: !isBright };
+      }
+
+      if (val.light !== undefined && val.light !== null) {
+        const s = String(val.light).trim().toUpperCase();
+        const isDark = (s === "TOI" || s === "TỐI" || s === "DARK");
+        const isBright = (s === "SANG" || s === "SÁNG" || s === "BRIGHT");
+
+        if (invertEl.checked) {
+          if (isDark) return { ok:true, raw:`light=${s}`, isDark:false };
+          if (isBright) return { ok:true, raw:`light=${s}`, isDark:true };
+        } else {
+          if (isDark) return { ok:true, raw:`light=${s}`, isDark:true };
+          if (isBright) return { ok:true, raw:`light=${s}`, isDark:false };
+        }
+        return { ok:false, raw:`light=${s}` };
+      }
+
+      return { ok:false, raw:"(no d0/light)" };
+    }
+
+    async function applyAutoControl(isDark) {
+      if (!autoEnabled) return;
+      // tối => bật, sáng => tắt
+      if (isDark) await writeLedCmd("1");
+      else await writeLedCmd("2");
+    }
+
+    async function render(val) {
+      updatedAtEl.textContent = new Date().toLocaleString();
+
+      const parsed = parseLight(val);
+      rawLightEl.textContent = parsed.raw;
+
+      if (!parsed.ok) {
+        lightTextEl.textContent = "--";
+        lastLightIsDark = null;
+        return;
+      }
+
+      lastLightIsDark = parsed.isDark;
+      lightTextEl.textContent = parsed.isDark ? "TỐI" : "SÁNG";
+
+      await applyAutoControl(parsed.isDark);
+    }
+
+    async function initCmd() {
+      try {
+        const snap = await get(ref(db, PATH_CMD));
+        if (snap.exists()) {
+          ledCmd = normalizeCmd(snap.val()) ?? "2";
+        } else {
+          ledCmd = "2";
+          await set(ref(db, PATH_CMD), "2");
+        }
+      } catch {
+        ledCmd = "2";
+      }
+      ledStateEl.textContent = ledCmd;
+      updateToggleButton();
+    }
+
+    async function startRealtime() {
+      try {
+        setStatus("Đang đăng nhập Anonymous…", null);
+        await signInAnonymously(auth);
+
+        await initCmd();
+
+        // ✅ Realtime listen data (light)
+        const rData = ref(db, PATH_DATA);
+        onValue(rData, (snap) => {
+          render(snap.val()).catch(() => {});
+        }, (err) => setStatus("Realtime data error: " + err.message, false));
+
+        // ✅ Realtime listen cmd (lamp state sync)
+        const rCmd = ref(db, PATH_CMD);
+        onValue(rCmd, (snap) => {
+          const cmd = normalizeCmd(snap.val());
+          if (!cmd) return;
+          ledCmd = cmd;
+          ledStateEl.textContent = cmd;
+          updateToggleButton();
+        }, (err) => setStatus("Realtime cmd error: " + err.message, false));
+
+        setStatus("Đã login. Đang nghe realtime…", true);
+      } catch (e) {
+        setStatus("Init/Auth error: " + e.message, false);
+      }
+    }
+
+    // Events
+    btnToggleLed.addEventListener("click", async () => {
+      setAutoEnabled(false);
+      const next = ((ledCmd ?? "2") === "1") ? "2" : "1";
+      try {
+        await writeLedCmd(next);
+        setStatus(next === "1" ? "Đã bật đèn (manual)." : "Đã tắt đèn (manual).", true);
+      } catch (e) {
+        setStatus("Write error: " + e.message, false);
+      }
+    });
+
+    btnAutoOn.addEventListener("click", async () => {
+      setAutoEnabled(true);
+      setStatus("Đã bật Auto control.", true);
+
+      if (lastLightIsDark !== null) {
+        try { await applyAutoControl(lastLightIsDark); } catch {}
+      } else {
+        try {
+          const snap = await get(ref(db, PATH_DATA));
+          await render(snap.val());
+        } catch {}
+      }
+    });
+
+    invertEl.addEventListener("change", async () => {
+      setAutoEnabled(true);
+      try {
+        const snap = await get(ref(db, PATH_DATA));
+        await render(snap.val());
+      } catch {}
+    });
+
+    startRealtime();
+  </script>
+</body>
+</html>
