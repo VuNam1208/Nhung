@@ -27,9 +27,6 @@ FirebaseAuth auth;
 FirebaseConfig config;
 
 // ====== Data nhận từ STM32 ======
-// giữ adc nếu cần debug (không bắt buộc)
-static volatile int latestAdc = -1;
-static volatile uint32_t latestAdcRxMs = 0;
 
 // dùng D0 để hiển thị sáng/tối
 static volatile int latestD0 = -1;            // -1 = chưa nhận được, 0/1 = hợp lệ
@@ -122,18 +119,6 @@ static void pollLoRaRx() {
     latestD0RxMs = millis();
     return;
   }
-
-  // (tương thích cũ) ADC:<adc>
-  if (rx.startsWith("ADC:")) {
-    String s = rx.substring(4);
-    s.trim();
-    int v = s.toInt();
-    latestAdc = v;
-    latestAdcRxMs = millis();
-    // không set latestD0 ở case này vì UI mới dùng d0
-  }
-
-  // ACK:1/2 chỉ log thôi (đã log ở trên)
 }
 
 void setup() {
@@ -224,8 +209,6 @@ void loop() {
       json.set("light", (d0 == 1) ? "TOI" : "SANG");
       json.set("rx_age_ms", (uint32_t)(millis() - latestD0RxMs));
 
-      // optional debug: vẫn gửi adc nếu bạn đang dùng SENS
-      if (latestAdc >= 0) json.set("adc", latestAdc);
 
       if (Firebase.setJSON(fbdo, "/esp32/data", json)) {
         Serial.printf("[FB] Sent OK | d0=%d (%s) | age=%lu ms\n",
