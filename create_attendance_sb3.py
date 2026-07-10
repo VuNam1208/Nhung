@@ -10,7 +10,9 @@ from pathlib import Path
 
 OUTPUT = Path(__file__).with_name("cham-cong-teachable-machine.sb3")
 MODEL_URL = "https://teachablemachine.withgoogle.com/models/Xn7QBPSlY/"
-MEMBERS = ("Trang", "Thỏ", "rắn")
+# Ten class PHAI giong metadata model (co dau cach cuoi o Tho/Ran)
+MEMBERS = ("Trang", "Thỏ ", "Rắn ")
+DISPLAY_NAMES = ("Trang", "Thỏ", "Rắn")
 SECONDS = 5
 LIST_ID = "list1"
 LIST_NAME = "Danh sách chấm công"
@@ -101,12 +103,12 @@ def item_equals(b: B, index: int, value: str | int, parent: str) -> str:
     return eq
 
 
-def build_one_turn(b: B, name: str, index: int) -> tuple[str, str]:
-    """Exact same detect style as working project, for one person."""
+def build_one_turn(b: B, label: str, display: str, index: int) -> tuple[str, str]:
+    """Detect using exact Teachable Machine label; show clean display name."""
     set_luot = b.add(
         "data_setvariableto",
         fields={"VARIABLE": ["luot", "luot_var"]},
-        inputs={"VALUE": b.text(name)},
+        inputs={"VALUE": b.text(display)},
         prefix=f"luot{index}",
     )
     set_time = b.add(
@@ -120,13 +122,12 @@ def build_one_turn(b: B, name: str, index: int) -> tuple[str, str]:
         "looks_sayforsecs",
         parent=set_time,
         inputs={
-            "MESSAGE": b.text(f"Den luot {name} - nhin camera!"),
+            "MESSAGE": b.text(f"Den luot {display} - nhin camera!"),
             "SECS": b.num(1),
         },
         prefix=f"say{index}",
     )
 
-    # repeat until time = 0
     loop = b.add("control_repeat_until", parent=say_luot, prefix=f"loop{index}")
     time0 = b.add("operator_equals", parent=loop, prefix=f"t0{index}")
     tvar = b.add(
@@ -137,21 +138,34 @@ def build_one_turn(b: B, name: str, index: int) -> tuple[str, str]:
     )
     b.blocks[time0]["inputs"] = {"OPERAND1": [2, tvar], "OPERAND2": b.num(0)}
 
-    # if <prediction is name> then
     if_pred = b.add("control_if", parent=loop, prefix=f"ip{index}")
-    pred = b.add(
+    # prediction is [exact label] OR (model prediction) = [exact label]
+    or_cond = b.add("operator_or", parent=if_pred, prefix=f"or{index}")
+    pred_menu = b.add(
         "teachableMachine_modelMatches",
-        parent=if_pred,
-        fields={"CLASS_NAME": [name, None]},
+        parent=or_cond,
+        fields={"CLASS_NAME": [label, None]},
         prefix=f"pred{index}",
     )
-    # if <item index = 0> then
+    pred_eq = b.add("operator_equals", parent=or_cond, prefix=f"peq{index}")
+    pred_val = b.add(
+        "teachableMachine_modelPrediction", parent=pred_eq, prefix=f"pval{index}"
+    )
+    b.blocks[pred_eq]["inputs"] = {
+        "OPERAND1": [2, pred_val],
+        "OPERAND2": b.text(label),
+    }
+    b.blocks[or_cond]["inputs"] = {
+        "OPERAND1": [2, pred_menu],
+        "OPERAND2": [2, pred_eq],
+    }
+
     if_empty = b.add("control_if", parent=if_pred, prefix=f"ie{index}")
     empty = item_equals(b, index, 0, if_empty)
     say_hi = b.add(
         "looks_sayforsecs",
         parent=if_empty,
-        inputs={"MESSAGE": b.text(f"Xin chao {name}!"), "SECS": b.num(1)},
+        inputs={"MESSAGE": b.text(f"Xin chao {display}!"), "SECS": b.num(1)},
         prefix=f"hi{index}",
     )
     replace = b.add(
@@ -162,7 +176,7 @@ def build_one_turn(b: B, name: str, index: int) -> tuple[str, str]:
     )
     b.blocks[replace]["inputs"] = {
         "INDEX": b.num(index),
-        "ITEM": b.text(name),
+        "ITEM": b.text(display),
     }
     b.chain(say_hi, replace)
     b.blocks[if_empty]["inputs"] = {
@@ -170,7 +184,7 @@ def build_one_turn(b: B, name: str, index: int) -> tuple[str, str]:
         "SUBSTACK": [2, say_hi],
     }
     b.blocks[if_pred]["inputs"] = {
-        "CONDITION": [2, pred],
+        "CONDITION": [2, or_cond],
         "SUBSTACK": [2, if_empty],
     }
 
@@ -249,13 +263,16 @@ def build() -> dict:
     )
 
     # Build 3 turns then link: load -> turn1 -> turn2 -> turn3 -> final
-    turn_blocks = [build_one_turn(b, name, i) for i, name in enumerate(MEMBERS, start=1)]
+    turn_blocks = [
+        build_one_turn(b, label, display, i)
+        for i, (label, display) in enumerate(zip(MEMBERS, DISPLAY_NAMES), start=1)
+    ]
 
     # final report
     if_full = b.add("control_if_else", prefix="full")
     filled = []
-    for i, name in enumerate(MEMBERS, start=1):
-        filled.append(item_equals(b, i, name, if_full))
+    for i, display in enumerate(DISPLAY_NAMES, start=1):
+        filled.append(item_equals(b, i, display, if_full))
     and1 = b.add("operator_and", parent=if_full, prefix="a1")
     b.blocks[and1]["inputs"] = {"OPERAND1": [2, filled[0]], "OPERAND2": [2, filled[1]]}
     and2 = b.add("operator_and", parent=if_full, prefix="a2")
@@ -273,14 +290,14 @@ def build() -> dict:
     )
 
     misses = []
-    for i, name in enumerate(MEMBERS, start=1):
+    for i, display in enumerate(DISPLAY_NAMES, start=1):
         parent = misses[-1] if misses else if_full
         if_m = b.add("control_if", parent=parent, prefix=f"m{i}")
         still0 = item_equals(b, i, 0, if_m)
         say_m = b.add(
             "looks_sayforsecs",
             parent=if_m,
-            inputs={"MESSAGE": b.text(f"Vang {name}"), "SECS": b.num(2)},
+            inputs={"MESSAGE": b.text(f"Vang {display}"), "SECS": b.num(2)},
             prefix=f"sm{i}",
         )
         b.blocks[if_m]["inputs"] = {
@@ -310,7 +327,7 @@ def build() -> dict:
             "width": 220,
             "height": 80,
             "minimized": False,
-            "text": "Trang 5s -> Tho 5s -> ran 5s. Bam co xanh.",
+            "text": "Class dung: Trang | Tho[space] | Ran[space]. Lan luot 5s.",
         }
     }
 
