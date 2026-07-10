@@ -439,9 +439,9 @@ def build_project() -> dict:
         use_model,
         load_wait,
         welcome,
-        turn_starts[0],
-        final_report,
     )
+    builder.link(welcome, turn_starts[0])
+    builder.link(turn_ends[-1], final_report)
 
     comments = {
         "model_comment": {
@@ -600,8 +600,26 @@ def build_project() -> dict:
     }
 
 
+def validate_execution_chain(project: dict) -> None:
+    blocks = project["targets"][1]["blocks"]
+    flag = next(k for k, v in blocks.items() if v["opcode"] == "event_whenflagclicked")
+    visited = set()
+    current = flag
+    opcodes: list[str] = []
+    while current and current not in visited:
+        visited.add(current)
+        opcodes.append(blocks[current]["opcode"])
+        current = blocks[current].get("next")
+    if "control_repeat_until" not in opcodes:
+        raise ValueError("Attendance loop missing from main script chain")
+    if opcodes.index("control_repeat_until") > opcodes.index("teachableMachine_useModelBlock"):
+        return
+    raise ValueError("Attendance loop appears before model load")
+
+
 def main() -> None:
     project = build_project()
+    validate_execution_chain(project)
     stage_asset, sprite_asset = create_assets()
     with zipfile.ZipFile(OUTPUT, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(

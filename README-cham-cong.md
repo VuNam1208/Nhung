@@ -36,5 +36,6 @@ Tên class trên Teachable Machine phải giống chính xác `An`, `Binh`, `Chi
 2. Dán đúng link mô hình vào `use model`.
 3. Huấn luyện lại với nhiều ảnh khuôn mặt hơn cho từng người.
 4. Thêm class `Background` (ảnh không có người) trên Teachable Machine.
+5. Mỗi người chỉ đứng trước camera khi được gọi tên ở `nguoi_dang_cho`.
 
 Chạy `python3 create_attendance_sb3.py` để tạo lại file sau khi đổi cấu hình ở đầu script.
