@@ -12,7 +12,7 @@ File dự án: `cham-cong-teachable-machine.sb3`
 
 ## Cấu hình mặc định
 
-- Thời gian chấm công: 30 giây.
+- Thời gian chấm công: 15 giây (nhìn vào camera trong 15 giây).
 - Ba class của mô hình: `An`, `Binh`, `Chi`.
 - Chương trình chỉ ghi nhận mỗi thành viên một lần.
 - Khi hết giờ, chương trình thông báo đầy đủ hoặc liệt kê người vắng.

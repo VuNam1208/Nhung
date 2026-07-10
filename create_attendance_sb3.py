@@ -12,7 +12,7 @@ from pathlib import Path
 OUTPUT = Path(__file__).with_name("cham-cong-teachable-machine.sb3")
 MODEL_URL = "Paste your Teachable Machine model URL here!"
 MEMBERS = ("An", "Binh", "Chi")
-ATTENDANCE_SECONDS = 30
+ATTENDANCE_SECONDS = 15
 
 
 class ProjectBuilder:
@@ -184,7 +184,9 @@ def build_project() -> dict:
         inputs={"MODEL_URL": builder.text_input(MODEL_URL)},
         prefix="use_model",
     )
-    welcome = builder.say("BAT DAU CHAM CONG - Hay dung truoc camera!", 2, flag)
+    welcome = builder.say(
+        "BAT DAU CHAM CONG - Nhin vao camera trong 15 giay!", 2, flag
+    )
 
     repeat = builder.block("control_repeat_until", parent=flag, prefix="countdown")
     timer_is_zero = builder.equals_variable("time", "time_var", 0, repeat)
