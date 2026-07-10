@@ -10,25 +10,31 @@ File dự án: `cham-cong-teachable-machine.sb3`
 4. Trong khối `use model`, thay dòng hướng dẫn bằng URL mô hình Teachable Machine.
 5. Bấm cờ xanh và cho phép trình duyệt sử dụng camera.
 
+## Cách chấm công (lần lượt từng người)
+
+1. Đợi 5 giây để mô hình tải xong.
+2. Chương trình gọi **An** → An nhìn thẳng camera trong **15 giây**.
+3. Nhận diện thành công → danh sách bên phải đổi `An: da den`.
+4. Tiếp theo gọi **Binh**, rồi **Chi** theo cùng cách.
+5. Cuối cùng thông báo đủ người hoặc ai vắng.
+
+## Màn hình hiển thị
+
+- Góc trái: `nguoi_dang_cho` (người đang được gọi), `person_time` (giây còn lại), `model prediction` (AI đang nhận diện gì).
+- Góc phải: danh sách `danh_sach_cham_cong`.
+
 ## Cấu hình mặc định
 
-- Thời gian chấm công: 15 giây (nhìn vào camera trong 15 giây).
-- Danh sách chấm công hiển thị ở góc phải màn hình (`danh_sach_cham_cong`).
-- Góc trái có `model prediction` để xem AI đang nhận diện tên nào.
-
-## Nếu vẫn báo vắng dù đã nhìn camera
-
-1. Kiểm tra `model prediction` có hiện đúng tên `An`, `Binh`, `Chi` không.
-2. Tên class trên Teachable Machine phải trùng khớp 100% với 3 tên trên.
-3. Dán đúng link mô hình vào khối `use model` (không để dòng hướng dẫn mặc định).
-4. Đợi 3 giây sau khi bấm cờ xanh để mô hình tải xong rồi mới đứng trước camera.
-5. Huấn luyện thêm ảnh khuôn mặt và thêm class `Background` cho ảnh không có người.
+- Mỗi người có 15 giây nhìn camera.
 - Ba class của mô hình: `An`, `Binh`, `Chi`.
-- Chương trình chỉ ghi nhận mỗi thành viên một lần.
-- Khi hết giờ, chương trình thông báo đầy đủ hoặc liệt kê người vắng.
 
-Tên class trong Teachable Machine phải giống chính xác `An`, `Binh`, `Chi`. Có thể
-đổi các tên này trong ba khối `when model detects` và phần thông báo nếu cần.
+Tên class trên Teachable Machine phải giống chính xác `An`, `Binh`, `Chi`.
 
-Chạy `python3 create_attendance_sb3.py` để tạo lại file dự án sau khi thay đổi cấu
-hình ở đầu script.
+## Nếu vẫn không nhận diện
+
+1. Kiểm tra `model prediction` có hiện đúng tên khi nhìn camera không.
+2. Dán đúng link mô hình vào `use model`.
+3. Huấn luyện lại với nhiều ảnh khuôn mặt hơn cho từng người.
+4. Thêm class `Background` (ảnh không có người) trên Teachable Machine.
+
+Chạy `python3 create_attendance_sb3.py` để tạo lại file sau khi đổi cấu hình ở đầu script.

@@ -12,13 +12,19 @@ from pathlib import Path
 OUTPUT = Path(__file__).with_name("cham-cong-teachable-machine.sb3")
 MODEL_URL = "Paste your Teachable Machine model URL here!"
 MEMBERS = ("An", "Binh", "Chi")
-ATTENDANCE_SECONDS = 15
+SECONDS_PER_PERSON = 15
+MODEL_LOAD_SECONDS = 5
 ATTENDANCE_LIST_ID = "attendance_list_id"
 ATTENDANCE_LIST_NAME = "danh_sach_cham_cong"
 MEMBER_STATUS = {
     "An": ("An: chua den", "An: da den", 1),
     "Binh": ("Binh: chua den", "Binh: da den", 2),
     "Chi": ("Chi: chua den", "Chi: da den", 3),
+}
+MEMBER_VARIABLES = {
+    "An": ("An_den", "an_var"),
+    "Binh": ("Binh_den", "binh_var"),
+    "Chi": ("Chi_den", "chi_var"),
 }
 
 
@@ -36,7 +42,6 @@ class ProjectBuilder:
         opcode: str,
         *,
         parent: str | None = None,
-        next_block: str | None = None,
         inputs: dict | None = None,
         fields: dict | None = None,
         shadow: bool = False,
@@ -48,7 +53,7 @@ class ProjectBuilder:
         block_id = self.identifier(prefix)
         value = {
             "opcode": opcode,
-            "next": next_block,
+            "next": None,
             "parent": parent,
             "inputs": inputs or {},
             "fields": fields or {},
@@ -153,6 +158,27 @@ class ProjectBuilder:
             prefix=f"pred_{member}",
         )
 
+    def prediction_equals(self, member: str, parent: str) -> str:
+        equals_id = self.block("operator_equals", parent=parent, prefix="pred_eq")
+        prediction = self.block(
+            "teachableMachine_modelPrediction",
+            parent=equals_id,
+            prefix="pred_value",
+        )
+        self.blocks[equals_id]["inputs"] = {
+            "OPERAND1": [2, prediction],
+            "OPERAND2": self.text_input(member),
+        }
+        return equals_id
+
+    def or_condition(self, left_id: str, right_id: str, parent: str) -> str:
+        or_id = self.block("operator_or", parent=parent, prefix="or")
+        self.blocks[or_id]["inputs"] = {
+            "OPERAND1": [2, left_id],
+            "OPERAND2": [2, right_id],
+        }
+        return or_id
+
     def wait_seconds(self, seconds: float, parent: str, prefix: str = "wait") -> str:
         return self.block(
             "control_wait",
@@ -174,7 +200,7 @@ def create_assets() -> tuple[tuple[str, bytes], tuple[str, bytes]]:
 <text x="240" y="62" text-anchor="middle" font-family="Arial" font-size="25" font-weight="bold" fill="#24508f">BANG CHAM CONG AI</text>
 <rect x="292" y="24" width="168" height="210" rx="12" fill="#ffffff" stroke="#24508f" stroke-width="3"/>
 <text x="376" y="48" text-anchor="middle" font-family="Arial" font-size="14" font-weight="bold" fill="#24508f">DANH SACH</text>
-<text x="240" y="320" text-anchor="middle" font-family="Arial" font-size="15" fill="#555">Nhin vao camera trong 15 giay</text>
+<text x="240" y="320" text-anchor="middle" font-family="Arial" font-size="15" fill="#555">Luot cham cong: tung nguoi nhin camera 15 giay</text>
 </svg>"""
     sprite_svg = b"""<svg xmlns="http://www.w3.org/2000/svg" width="190" height="190">
 <circle cx="95" cy="95" r="86" fill="#4c97ff"/>
@@ -187,20 +213,151 @@ def create_assets() -> tuple[tuple[str, bytes], tuple[str, bytes]]:
     return (stage_name, stage_svg), (sprite_name, sprite_svg)
 
 
+def build_mark_member(builder: ProjectBuilder, member: str, parent: str) -> str:
+    variable_name, variable_id = MEMBER_VARIABLES[member]
+    detect_if = builder.block("control_if", parent=parent, prefix=f"detect_{member}")
+    detected = builder.or_condition(
+        builder.prediction_is(member, detect_if),
+        builder.prediction_equals(member, detect_if),
+        detect_if,
+    )
+    confirm_if = builder.block("control_if", parent=detect_if, prefix=f"confirm_{member}")
+    is_new = builder.equals_variable(variable_name, variable_id, 0, confirm_if)
+    mark_present = builder.set_variable(variable_name, variable_id, 1, confirm_if)
+    update_list = builder.replace_list_item(
+        MEMBER_STATUS[member][2],
+        MEMBER_STATUS[member][1],
+        ATTENDANCE_LIST_NAME,
+        ATTENDANCE_LIST_ID,
+        mark_present,
+    )
+    success = builder.say(f"{member} da cham cong thanh cong!", 2, update_list)
+    builder.link(mark_present, update_list, success)
+    builder.blocks[confirm_if]["inputs"] = {
+        "CONDITION": [2, is_new],
+        "SUBSTACK": [2, mark_present],
+    }
+    builder.blocks[detect_if]["inputs"] = {
+        "CONDITION": [2, detected],
+        "SUBSTACK": [2, confirm_if],
+    }
+    return detect_if
+
+
+def build_member_turn(builder: ProjectBuilder, member: str, parent: str) -> tuple[str, str]:
+    variable_name, variable_id = MEMBER_VARIABLES[member]
+    set_timer = builder.set_variable(
+        "person_time", "person_time_var", SECONDS_PER_PERSON, parent
+    )
+    set_current = builder.set_variable(
+        "nguoi_dang_cho", "current_var", member, set_timer
+    )
+    prompt = builder.say(
+        f"Luot cham cong: {member} - hay nhin thang vao camera!", 3, set_current
+    )
+    repeat = builder.block("control_repeat_until", parent=prompt, prefix=f"wait_{member}")
+    is_marked = builder.equals_variable(variable_name, variable_id, 1, repeat)
+    timer_done = builder.equals_variable("person_time", "person_time_var", 0, repeat)
+    stop_condition = builder.or_condition(is_marked, timer_done, repeat)
+    detect = build_mark_member(builder, member, repeat)
+    wait = builder.wait_seconds(1, detect, prefix=f"pause_{member}")
+    decrement = builder.block(
+        "data_changevariableby",
+        parent=wait,
+        inputs={"VALUE": builder.number_input(-1)},
+        fields={"VARIABLE": ["person_time", "person_time_var"]},
+        prefix=f"tick_{member}",
+    )
+    builder.link(detect, wait, decrement)
+    builder.blocks[repeat]["inputs"] = {
+        "CONDITION": [2, stop_condition],
+        "SUBSTACK": [2, detect],
+    }
+    missed_if = builder.block("control_if", parent=repeat, prefix=f"missed_{member}")
+    still_missing = builder.equals_variable(variable_name, variable_id, 0, missed_if)
+    missed_say = builder.say(
+        f"Khong nhan dien duoc {member}. Hay thu lai hoac kiem tra model.", 2, missed_if
+    )
+    builder.blocks[missed_if]["inputs"] = {
+        "CONDITION": [2, still_missing],
+        "SUBSTACK": [2, missed_say],
+    }
+    builder.link(set_timer, set_current, prompt, repeat, missed_if)
+    return set_timer, missed_if
+
+
+def build_final_report(builder: ProjectBuilder, parent: str) -> str:
+    final_if = builder.block("control_if_else", parent=parent, prefix="final_check")
+    eq_an = builder.equals_variable("An_den", "an_var", 1, final_if)
+    eq_binh = builder.equals_variable("Binh_den", "binh_var", 1, final_if)
+    eq_chi = builder.equals_variable("Chi_den", "chi_var", 1, final_if)
+    and_left = builder.block(
+        "operator_and",
+        parent=final_if,
+        inputs={"OPERAND1": [2, eq_an], "OPERAND2": [2, eq_binh]},
+        prefix="and",
+    )
+    and_all = builder.block(
+        "operator_and",
+        parent=final_if,
+        inputs={"OPERAND1": [2, and_left], "OPERAND2": [2, eq_chi]},
+        prefix="and_all",
+    )
+    builder.blocks[and_left]["parent"] = and_all
+    full_message = builder.say("Moi nguoi da den day du!", 4, final_if)
+
+    missing_start = builder.set_variable("result", "result_var", "Vang: ", final_if)
+    missing_checks: list[str] = []
+    previous = missing_start
+    for member in MEMBERS:
+        variable_name, variable_id = MEMBER_VARIABLES[member]
+        check = builder.block("control_if", parent=previous, prefix=f"missing_{member}")
+        condition = builder.equals_variable(variable_name, variable_id, 0, check)
+        set_result = builder.block(
+            "data_setvariableto",
+            parent=check,
+            fields={"VARIABLE": ["result", "result_var"]},
+            prefix=f"append_{member}",
+        )
+        join = builder.block("operator_join", parent=set_result, prefix="join")
+        result_reporter = builder.variable_reporter("result", "result_var", join)
+        builder.blocks[join]["inputs"] = {
+            "STRING1": [2, result_reporter],
+            "STRING2": builder.text_input(member + " "),
+        }
+        builder.blocks[set_result]["inputs"] = {"VALUE": [2, join]}
+        builder.blocks[check]["inputs"] = {
+            "CONDITION": [2, condition],
+            "SUBSTACK": [2, set_result],
+        }
+        missing_checks.append(check)
+        previous = check
+    missing_say = builder.block(
+        "looks_sayforsecs",
+        parent=previous,
+        inputs={"SECS": builder.number_input(4)},
+        prefix="say_missing",
+    )
+    result_reporter = builder.variable_reporter("result", "result_var", missing_say)
+    builder.blocks[missing_say]["inputs"]["MESSAGE"] = [2, result_reporter]
+    builder.link(missing_start, *missing_checks, missing_say)
+    builder.blocks[final_if]["inputs"] = {
+        "CONDITION": [2, and_all],
+        "SUBSTACK": [2, full_message],
+        "SUBSTACK2": [2, missing_start],
+    }
+    return final_if
+
+
 def build_project() -> dict:
     builder = ProjectBuilder()
     variables = {
-        "time_var": ["time", ATTENDANCE_SECONDS],
-        "done_var": ["done", 0],
+        "person_time_var": ["person_time", SECONDS_PER_PERSON],
+        "current_var": ["nguoi_dang_cho", ""],
         "an_var": ["An_den", 0],
         "binh_var": ["Binh_den", 0],
         "chi_var": ["Chi_den", 0],
         "result_var": ["result", ""],
-    }
-    member_variables = {
-        "An": ("An_den", "an_var"),
-        "Binh": ("Binh_den", "binh_var"),
-        "Chi": ("Chi_den", "chi_var"),
     }
 
     flag = builder.block(
@@ -211,8 +368,8 @@ def build_project() -> dict:
         prefix="green_flag",
     )
     initializers = [
-        builder.set_variable("time", "time_var", ATTENDANCE_SECONDS, flag),
-        builder.set_variable("done", "done_var", 0, flag),
+        builder.set_variable("person_time", "person_time_var", SECONDS_PER_PERSON, flag),
+        builder.set_variable("nguoi_dang_cho", "current_var", "", flag),
         builder.set_variable("An_den", "an_var", 0, flag),
         builder.set_variable("Binh_den", "binh_var", 0, flag),
         builder.set_variable("Chi_den", "chi_var", 0, flag),
@@ -255,94 +412,22 @@ def build_project() -> dict:
         inputs={"MODEL_URL": builder.text_input(MODEL_URL)},
         prefix="use_model",
     )
-    load_wait = builder.wait_seconds(3, flag, prefix="load_wait")
+    load_wait = builder.wait_seconds(MODEL_LOAD_SECONDS, flag, prefix="load_wait")
     welcome = builder.say(
-        "BAT DAU CHAM CONG - Nhin vao camera trong 15 giay!", 2, flag
+        "Chuan bi cham cong lan luot tung nguoi. Moi nguoi co 15 giay.", 3, flag
     )
 
-    repeat = builder.block("control_repeat_until", parent=flag, prefix="countdown")
-    timer_is_zero = builder.equals_variable("time", "time_var", 0, repeat)
-    wait = builder.block(
-        "control_wait",
-        parent=repeat,
-        inputs={"DURATION": builder.number_input(1)},
-        prefix="wait",
-    )
-    decrement = builder.block(
-        "data_changevariableby",
-        parent=wait,
-        inputs={"VALUE": builder.number_input(-1)},
-        fields={"VARIABLE": ["time", "time_var"]},
-        prefix="decrement_time",
-    )
-    builder.link(wait, decrement)
-    builder.blocks[repeat]["inputs"] = {
-        "CONDITION": [2, timer_is_zero],
-        "SUBSTACK": [2, wait],
-    }
-    finish = builder.set_variable("done", "done_var", 1, repeat)
-
-    final_if = builder.block("control_if_else", parent=finish, prefix="final_check")
-    eq_an = builder.equals_variable("An_den", "an_var", 1, final_if)
-    eq_binh = builder.equals_variable("Binh_den", "binh_var", 1, final_if)
-    eq_chi = builder.equals_variable("Chi_den", "chi_var", 1, final_if)
-    and_left = builder.block(
-        "operator_and",
-        parent=final_if,
-        inputs={"OPERAND1": [2, eq_an], "OPERAND2": [2, eq_binh]},
-        prefix="and",
-    )
-    and_all = builder.block(
-        "operator_and",
-        parent=final_if,
-        inputs={"OPERAND1": [2, and_left], "OPERAND2": [2, eq_chi]},
-        prefix="and",
-    )
-    builder.blocks[and_left]["parent"] = and_all
-    full_message = builder.say("Moi nguoi da den day du!", 4, final_if)
-
-    missing_start = builder.set_variable(
-        "result", "result_var", "Vang: ", final_if
-    )
-    missing_checks: list[str] = []
-    previous = missing_start
+    turn_starts: list[str] = []
+    turn_ends: list[str] = []
     for member in MEMBERS:
-        variable_name, variable_id = member_variables[member]
-        check = builder.block("control_if", parent=previous, prefix=f"missing_{member}")
-        condition = builder.equals_variable(variable_name, variable_id, 0, check)
-        set_result = builder.block(
-            "data_setvariableto",
-            parent=check,
-            fields={"VARIABLE": ["result", "result_var"]},
-            prefix=f"append_{member}",
-        )
-        join = builder.block("operator_join", parent=set_result, prefix="join")
-        result_reporter = builder.variable_reporter("result", "result_var", join)
-        builder.blocks[join]["inputs"] = {
-            "STRING1": [2, result_reporter],
-            "STRING2": builder.text_input(member + " "),
-        }
-        builder.blocks[set_result]["inputs"] = {"VALUE": [2, join]}
-        builder.blocks[check]["inputs"] = {
-            "CONDITION": [2, condition],
-            "SUBSTACK": [2, set_result],
-        }
-        missing_checks.append(check)
-        previous = check
-    missing_say = builder.block(
-        "looks_sayforsecs",
-        parent=previous,
-        inputs={"SECS": builder.number_input(4)},
-        prefix="say_missing",
-    )
-    result_reporter = builder.variable_reporter("result", "result_var", missing_say)
-    builder.blocks[missing_say]["inputs"]["MESSAGE"] = [2, result_reporter]
-    builder.link(missing_start, *missing_checks, missing_say)
-    builder.blocks[final_if]["inputs"] = {
-        "CONDITION": [2, and_all],
-        "SUBSTACK": [2, full_message],
-        "SUBSTACK2": [2, missing_start],
-    }
+        first, last = build_member_turn(builder, member, flag)
+        turn_starts.append(first)
+        turn_ends.append(last)
+
+    for index in range(len(turn_starts) - 1):
+        builder.link(turn_ends[index], turn_starts[index + 1])
+
+    final_report = build_final_report(builder, turn_ends[-1])
 
     builder.link(
         flag,
@@ -354,9 +439,8 @@ def build_project() -> dict:
         use_model,
         load_wait,
         welcome,
-        repeat,
-        finish,
-        final_if,
+        turn_starts[0],
+        final_report,
     )
 
     comments = {
@@ -364,71 +448,21 @@ def build_project() -> dict:
             "blockId": use_model,
             "x": 420,
             "y": 80,
-            "width": 280,
-            "height": 130,
+            "width": 300,
+            "height": 150,
             "minimized": False,
             "text": (
-                "Thay link Teachable Machine cua ban. Ten class phai dung: "
-                "An, Binh, Chi. Sau khi bam co xanh, doi 3 giay de model tai."
+                "Dan link Teachable Machine. Ten class phai dung: An, Binh, Chi. "
+                "Chuong trinh goi lan luot tung nguoi, moi nguoi 15 giay nhin camera."
             ),
         }
     }
-
-    scan_flag = builder.block(
-        "event_whenflagclicked",
-        top_level=True,
-        x=35,
-        y=900,
-        prefix="scan_flag",
-    )
-    scan_wait = builder.wait_seconds(3, scan_flag, prefix="scan_wait")
-    scan_forever = builder.block("control_forever", parent=scan_wait, prefix="scan_forever")
-    scan_open = builder.block("control_if", parent=scan_forever, prefix="scan_open")
-    scan_is_open = builder.equals_variable("done", "done_var", 0, scan_open)
-    member_scan_blocks: list[str] = []
-    for member in MEMBERS:
-        variable_name, variable_id = member_variables[member]
-        parent_for_member = member_scan_blocks[-1] if member_scan_blocks else scan_open
-        member_if = builder.block(
-            "control_if", parent=parent_for_member, prefix=f"scan_{member}"
-        )
-        prediction = builder.prediction_is(member, member_if)
-        member_new_if = builder.block("control_if", parent=member_if, prefix=f"scan_new_{member}")
-        is_new = builder.equals_variable(variable_name, variable_id, 0, member_new_if)
-        mark_present = builder.set_variable(variable_name, variable_id, 1, member_new_if)
-        update_list = builder.replace_list_item(
-            MEMBER_STATUS[member][2],
-            MEMBER_STATUS[member][1],
-            ATTENDANCE_LIST_NAME,
-            ATTENDANCE_LIST_ID,
-            mark_present,
-        )
-        builder.link(mark_present, update_list)
-        builder.blocks[member_new_if]["inputs"] = {
-            "CONDITION": [2, is_new],
-            "SUBSTACK": [2, mark_present],
-        }
-        builder.blocks[member_if]["inputs"] = {
-            "CONDITION": [2, prediction],
-            "SUBSTACK": [2, member_new_if],
-        }
-        member_scan_blocks.append(member_if)
-    builder.link(*member_scan_blocks)
-    scan_pause = builder.wait_seconds(0.3, scan_forever, prefix="scan_pause")
-    builder.blocks[scan_open]["inputs"] = {
-        "CONDITION": [2, scan_is_open],
-        "SUBSTACK": [2, member_scan_blocks[0]],
-    }
-    builder.link(scan_open, scan_pause)
-    builder.blocks[scan_forever]["inputs"] = {"SUBSTACK": [2, scan_open]}
-    builder.link(scan_flag, scan_wait, scan_forever)
 
     stage_asset, sprite_asset = create_assets()
     stage_name, _ = stage_asset
     sprite_name, _ = sprite_asset
     stage_md5 = stage_name.removesuffix(".svg")
     sprite_md5 = sprite_name.removesuffix(".svg")
-
     attendance_list = [MEMBER_STATUS[member][0] for member in MEMBERS]
 
     return {
@@ -496,19 +530,35 @@ def build_project() -> dict:
         ],
         "monitors": [
             {
-                "id": "time_var",
+                "id": "current_var",
                 "mode": "default",
                 "opcode": "data_variable",
-                "params": {"VARIABLE": "time"},
+                "params": {"VARIABLE": "nguoi_dang_cho"},
                 "spriteName": None,
-                "value": ATTENDANCE_SECONDS,
+                "value": "",
                 "width": 0,
                 "height": 0,
                 "x": 10,
                 "y": 10,
                 "visible": True,
                 "sliderMin": 0,
-                "sliderMax": ATTENDANCE_SECONDS,
+                "sliderMax": 100,
+                "isDiscrete": True,
+            },
+            {
+                "id": "person_time_var",
+                "mode": "default",
+                "opcode": "data_variable",
+                "params": {"VARIABLE": "person_time"},
+                "spriteName": None,
+                "value": SECONDS_PER_PERSON,
+                "width": 0,
+                "height": 0,
+                "x": 10,
+                "y": 40,
+                "visible": True,
+                "sliderMin": 0,
+                "sliderMax": SECONDS_PER_PERSON,
                 "isDiscrete": True,
             },
             {
@@ -534,7 +584,7 @@ def build_project() -> dict:
                 "width": 0,
                 "height": 0,
                 "x": 10,
-                "y": 48,
+                "y": 70,
                 "visible": True,
                 "sliderMin": 0,
                 "sliderMax": 100,
