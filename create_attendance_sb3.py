@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sequential attendance: Trang 5s -> Tho 5s -> ran 5s."""
+"""Sequential attendance - same detection as working Trang version."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ MEMBERS = ("Trang", "Thỏ", "rắn")
 SECONDS = 5
 LIST_ID = "list1"
 LIST_NAME = "Danh sách chấm công"
-EMPTY = "0"
 
 
 class B:
@@ -83,62 +82,52 @@ def costume(md5ext: str, name: str, cx: int, cy: int) -> dict:
     }
 
 
-def pred_is(b: B, name: str, parent: str) -> str:
-    """Use both prediction is + model prediction = name."""
-    or_id = b.add("operator_or", parent=parent, prefix="or")
-    match = b.add(
-        "teachableMachine_modelMatches",
-        parent=or_id,
-        fields={"CLASS_NAME": [name, None]},
-        prefix="pm",
-    )
-    eq = b.add("operator_equals", parent=or_id, prefix="eq")
-    pred = b.add("teachableMachine_modelPrediction", parent=eq, prefix="pred")
-    b.blocks[eq]["inputs"] = {"OPERAND1": [2, pred], "OPERAND2": b.text(name)}
-    b.blocks[or_id]["inputs"] = {"OPERAND1": [2, match], "OPERAND2": [2, eq]}
-    return or_id
-
-
-def build_turn(b: B, member: str, index: int, parent: str) -> tuple[str, str]:
-    """One person turn: announce, countdown 5s while detecting, then next."""
-    set_who = b.add(
-        "data_setvariableto",
+def item_of_list(b: B, index: int, parent: str) -> str:
+    block = b.add(
+        "data_itemoflist",
         parent=parent,
+        fields={"LIST": [LIST_NAME, LIST_ID]},
+        prefix="item",
+    )
+    b.blocks[block]["inputs"] = {"INDEX": b.num(index)}
+    return block
+
+
+def item_equals(b: B, index: int, value: str | int, parent: str) -> str:
+    eq = b.add("operator_equals", parent=parent, prefix="eq")
+    item = item_of_list(b, index, eq)
+    rhs = b.num(value) if isinstance(value, int) else b.text(value)
+    b.blocks[eq]["inputs"] = {"OPERAND1": [2, item], "OPERAND2": rhs}
+    return eq
+
+
+def build_one_turn(b: B, name: str, index: int) -> tuple[str, str]:
+    """Exact same detect style as working project, for one person."""
+    set_luot = b.add(
+        "data_setvariableto",
         fields={"VARIABLE": ["luot", "luot_var"]},
-        inputs={"VALUE": b.text(member)},
-        prefix=f"who{index}",
+        inputs={"VALUE": b.text(name)},
+        prefix=f"luot{index}",
     )
     set_time = b.add(
         "data_setvariableto",
-        parent=set_who,
+        parent=set_luot,
         fields={"VARIABLE": ["time", "time_var"]},
         inputs={"VALUE": b.num(SECONDS)},
-        prefix=f"t{index}",
+        prefix=f"time{index}",
     )
-    say_turn = b.add(
+    say_luot = b.add(
         "looks_sayforsecs",
         parent=set_time,
         inputs={
-            "MESSAGE": b.text(f"Luot {member}: nhin camera 5 giay!"),
-            "SECS": b.num(2),
+            "MESSAGE": b.text(f"Den luot {name} - nhin camera!"),
+            "SECS": b.num(1),
         },
         prefix=f"say{index}",
     )
 
-    loop = b.add("control_repeat_until", parent=say_turn, prefix=f"loop{index}")
-    # stop when time=0 OR already marked
-    marked = b.add("operator_equals", parent=loop, prefix=f"mk{index}")
-    item_m = b.add(
-        "data_itemoflist",
-        parent=marked,
-        fields={"LIST": [LIST_NAME, LIST_ID]},
-        prefix=f"itm{index}",
-    )
-    b.blocks[item_m]["inputs"] = {"INDEX": b.num(index)}
-    b.blocks[marked]["inputs"] = {
-        "OPERAND1": [2, item_m],
-        "OPERAND2": b.text(member),
-    }
+    # repeat until time = 0
+    loop = b.add("control_repeat_until", parent=say_luot, prefix=f"loop{index}")
     time0 = b.add("operator_equals", parent=loop, prefix=f"t0{index}")
     tvar = b.add(
         "data_variable",
@@ -147,48 +136,41 @@ def build_turn(b: B, member: str, index: int, parent: str) -> tuple[str, str]:
         prefix=f"tv{index}",
     )
     b.blocks[time0]["inputs"] = {"OPERAND1": [2, tvar], "OPERAND2": b.num(0)}
-    stop = b.add("operator_or", parent=loop, prefix=f"stop{index}")
-    b.blocks[stop]["inputs"] = {"OPERAND1": [2, marked], "OPERAND2": [2, time0]}
 
-    # inside loop: if prediction matches and slot empty -> mark
+    # if <prediction is name> then
     if_pred = b.add("control_if", parent=loop, prefix=f"ip{index}")
-    cond = pred_is(b, member, if_pred)
-    if_empty = b.add("control_if", parent=if_pred, prefix=f"ie{index}")
-    empty = b.add("operator_equals", parent=if_empty, prefix=f"ee{index}")
-    item = b.add(
-        "data_itemoflist",
-        parent=empty,
-        fields={"LIST": [LIST_NAME, LIST_ID]},
-        prefix=f"it{index}",
+    pred = b.add(
+        "teachableMachine_modelMatches",
+        parent=if_pred,
+        fields={"CLASS_NAME": [name, None]},
+        prefix=f"pred{index}",
     )
-    b.blocks[item]["inputs"] = {"INDEX": b.num(index)}
-    b.blocks[empty]["inputs"] = {
-        "OPERAND1": [2, item],
-        "OPERAND2": b.text(EMPTY),
-    }
+    # if <item index = 0> then
+    if_empty = b.add("control_if", parent=if_pred, prefix=f"ie{index}")
+    empty = item_equals(b, index, 0, if_empty)
+    say_hi = b.add(
+        "looks_sayforsecs",
+        parent=if_empty,
+        inputs={"MESSAGE": b.text(f"Xin chao {name}!"), "SECS": b.num(1)},
+        prefix=f"hi{index}",
+    )
     replace = b.add(
         "data_replaceitemoflist",
-        parent=if_empty,
+        parent=say_hi,
         fields={"LIST": [LIST_NAME, LIST_ID]},
         prefix=f"rp{index}",
     )
     b.blocks[replace]["inputs"] = {
         "INDEX": b.num(index),
-        "ITEM": b.text(member),
+        "ITEM": b.text(name),
     }
-    hello = b.add(
-        "looks_say",
-        parent=replace,
-        inputs={"MESSAGE": b.text(f"Xin chao {member}! Da cham cong.")},
-        prefix=f"hi{index}",
-    )
-    b.chain(replace, hello)
+    b.chain(say_hi, replace)
     b.blocks[if_empty]["inputs"] = {
         "CONDITION": [2, empty],
-        "SUBSTACK": [2, replace],
+        "SUBSTACK": [2, say_hi],
     }
     b.blocks[if_pred]["inputs"] = {
-        "CONDITION": [2, cond],
+        "CONDITION": [2, pred],
         "SUBSTACK": [2, if_empty],
     }
 
@@ -207,64 +189,36 @@ def build_turn(b: B, member: str, index: int, parent: str) -> tuple[str, str]:
     )
     b.chain(if_pred, wait1, dec)
     b.blocks[loop]["inputs"] = {
-        "CONDITION": [2, stop],
+        "CONDITION": [2, time0],
         "SUBSTACK": [2, if_pred],
     }
 
-    # if still empty after turn -> say missed (but continue)
-    miss_if = b.add("control_if", parent=loop, prefix=f"miss{index}")
-    still = b.add("operator_equals", parent=miss_if, prefix=f"st{index}")
-    item2 = b.add(
-        "data_itemoflist",
-        parent=still,
-        fields={"LIST": [LIST_NAME, LIST_ID]},
-        prefix=f"it2{index}",
-    )
-    b.blocks[item2]["inputs"] = {"INDEX": b.num(index)}
-    b.blocks[still]["inputs"] = {
-        "OPERAND1": [2, item2],
-        "OPERAND2": b.text(EMPTY),
-    }
-    say_miss = b.add(
-        "looks_sayforsecs",
-        parent=miss_if,
-        inputs={
-            "MESSAGE": b.text(f"Khong nhan ra {member}. Sang luot sau."),
-            "SECS": b.num(2),
-        },
-        prefix=f"sm{index}",
-    )
-    b.blocks[miss_if]["inputs"] = {
-        "CONDITION": [2, still],
-        "SUBSTACK": [2, say_miss],
-    }
-
-    b.chain(set_who, set_time, say_turn, loop, miss_if)
-    return set_who, miss_if
+    b.chain(set_luot, set_time, say_luot, loop)
+    return set_luot, loop
 
 
 def build() -> dict:
     b = B()
-    flag = b.add("event_whenflagclicked", top=True, x=30, y=30, prefix="flag")
 
+    flag = b.add("event_whenflagclicked", top=True, x=40, y=40, prefix="flag")
     clear = b.add(
         "data_deletealloflist",
         parent=flag,
         fields={"LIST": [LIST_NAME, LIST_ID]},
         prefix="clear",
     )
-    zeros = []
+    adds = []
     prev = clear
     for i in range(3):
-        z = b.add(
+        a = b.add(
             "data_addtolist",
             parent=prev,
             fields={"LIST": [LIST_NAME, LIST_ID]},
-            inputs={"ITEM": b.text(EMPTY)},
-            prefix=f"z{i}",
+            inputs={"ITEM": b.num(0)},
+            prefix=f"add{i}",
         )
-        zeros.append(z)
-        prev = z
+        adds.append(a)
+        prev = a
 
     use = b.add(
         "teachableMachine_useModelBlock",
@@ -293,53 +247,23 @@ def build() -> dict:
         inputs={"DURATION": b.num(2)},
         prefix="load",
     )
-    intro = b.add(
-        "looks_sayforsecs",
-        parent=load,
-        inputs={
-            "MESSAGE": b.text("Bat dau cham cong lan luot tung nguoi"),
-            "SECS": b.num(2),
-        },
-        prefix="intro",
-    )
 
-    turns = []
-    parent = intro
-    for index, member in enumerate(MEMBERS, start=1):
-        first, last = build_turn(b, member, index, parent)
-        turns.append((first, last))
-        parent = last
-
-    # link turns
-    for i in range(len(turns) - 1):
-        b.chain(turns[i][1], turns[i + 1][0])
+    # Build 3 turns then link: load -> turn1 -> turn2 -> turn3 -> final
+    turn_blocks = [build_one_turn(b, name, i) for i, name in enumerate(MEMBERS, start=1)]
 
     # final report
-    final_parent = turns[-1][1]
-    if_full = b.add("control_if_else", parent=final_parent, prefix="full")
-    eqs = []
-    for index, member in enumerate(MEMBERS, start=1):
-        eq = b.add("operator_equals", parent=if_full, prefix=f"fe{index}")
-        item = b.add(
-            "data_itemoflist",
-            parent=eq,
-            fields={"LIST": [LIST_NAME, LIST_ID]},
-            prefix=f"fi{index}",
-        )
-        b.blocks[item]["inputs"] = {"INDEX": b.num(index)}
-        b.blocks[eq]["inputs"] = {
-            "OPERAND1": [2, item],
-            "OPERAND2": b.text(member),
-        }
-        eqs.append(eq)
+    if_full = b.add("control_if_else", prefix="full")
+    filled = []
+    for i, name in enumerate(MEMBERS, start=1):
+        filled.append(item_equals(b, i, name, if_full))
     and1 = b.add("operator_and", parent=if_full, prefix="a1")
-    b.blocks[and1]["inputs"] = {"OPERAND1": [2, eqs[0]], "OPERAND2": [2, eqs[1]]}
+    b.blocks[and1]["inputs"] = {"OPERAND1": [2, filled[0]], "OPERAND2": [2, filled[1]]}
     and2 = b.add("operator_and", parent=if_full, prefix="a2")
-    b.blocks[and2]["inputs"] = {"OPERAND1": [2, and1], "OPERAND2": [2, eqs[2]]}
-    b.blocks[eqs[0]]["parent"] = and1
-    b.blocks[eqs[1]]["parent"] = and1
+    b.blocks[and2]["inputs"] = {"OPERAND1": [2, and1], "OPERAND2": [2, filled[2]]}
+    b.blocks[filled[0]]["parent"] = and1
+    b.blocks[filled[1]]["parent"] = and1
     b.blocks[and1]["parent"] = and2
-    b.blocks[eqs[2]]["parent"] = and2
+    b.blocks[filled[2]]["parent"] = and2
 
     say_full = b.add(
         "looks_sayforsecs",
@@ -349,28 +273,20 @@ def build() -> dict:
     )
 
     misses = []
-    for index, member in enumerate(MEMBERS, start=1):
-        parent_m = misses[-1] if misses else if_full
-        if_m = b.add("control_if", parent=parent_m, prefix=f"m{index}")
-        eq = b.add("operator_equals", parent=if_m, prefix=f"me{index}")
-        item = b.add(
-            "data_itemoflist",
-            parent=eq,
-            fields={"LIST": [LIST_NAME, LIST_ID]},
-            prefix=f"mi{index}",
-        )
-        b.blocks[item]["inputs"] = {"INDEX": b.num(index)}
-        b.blocks[eq]["inputs"] = {
-            "OPERAND1": [2, item],
-            "OPERAND2": b.text(EMPTY),
-        }
+    for i, name in enumerate(MEMBERS, start=1):
+        parent = misses[-1] if misses else if_full
+        if_m = b.add("control_if", parent=parent, prefix=f"m{i}")
+        still0 = item_equals(b, i, 0, if_m)
         say_m = b.add(
             "looks_sayforsecs",
             parent=if_m,
-            inputs={"MESSAGE": b.text(f"Vang {member}"), "SECS": b.num(2)},
-            prefix=f"sm{index}",
+            inputs={"MESSAGE": b.text(f"Vang {name}"), "SECS": b.num(2)},
+            prefix=f"sm{i}",
         )
-        b.blocks[if_m]["inputs"] = {"CONDITION": [2, eq], "SUBSTACK": [2, say_m]}
+        b.blocks[if_m]["inputs"] = {
+            "CONDITION": [2, still0],
+            "SUBSTACK": [2, say_m],
+        }
         misses.append(if_m)
     b.chain(*misses)
     b.blocks[if_full]["inputs"] = {
@@ -379,19 +295,22 @@ def build() -> dict:
         "SUBSTACK2": [2, misses[0]],
     }
 
-    b.chain(flag, clear, *zeros, use, von, trans, load, intro)
-    b.chain(intro, turns[0][0])
-    b.chain(turns[-1][1], if_full)
+    # Link everything carefully
+    b.chain(flag, clear, *adds, use, von, trans, load)
+    b.chain(load, turn_blocks[0][0])
+    b.chain(turn_blocks[0][1], turn_blocks[1][0])
+    b.chain(turn_blocks[1][1], turn_blocks[2][0])
+    b.chain(turn_blocks[2][1], if_full)
 
     comments = {
         "c1": {
             "blockId": use,
-            "x": 400,
+            "x": 380,
             "y": 40,
-            "width": 240,
-            "height": 90,
+            "width": 220,
+            "height": 80,
             "minimized": False,
-            "text": "Lan luot: Trang 5s -> Tho 5s -> ran 5s. Bam co xanh.",
+            "text": "Trang 5s -> Tho 5s -> ran 5s. Bam co xanh.",
         }
     }
 
@@ -408,7 +327,7 @@ def build() -> dict:
                     "time_var": ["time", SECONDS],
                     "luot_var": ["luot", ""],
                 },
-                "lists": {LIST_ID: [LIST_NAME, [EMPTY, EMPTY, EMPTY]]},
+                "lists": {LIST_ID: [LIST_NAME, [0, 0, 0]]},
                 "broadcasts": {},
                 "blocks": {},
                 "comments": {},
@@ -483,7 +402,7 @@ def build() -> dict:
                 "opcode": "data_listcontents",
                 "params": {"LIST": LIST_NAME},
                 "spriteName": None,
-                "value": [EMPTY, EMPTY, EMPTY],
+                "value": [0, 0, 0],
                 "width": 0,
                 "height": 0,
                 "x": 260,
@@ -492,7 +411,7 @@ def build() -> dict:
             },
         ],
         "extensions": ["teachableMachine"],
-        "meta": {"semver": "3.0.0", "vm": "11.1.0", "agent": "sequential-5s"},
+        "meta": {"semver": "3.0.0", "vm": "11.1.0", "agent": "seq-simple-detect"},
         "_assets": [stage_f, sprite_f],
     }
 
@@ -501,14 +420,15 @@ def main() -> None:
     project = build()
     assets = project.pop("_assets")
     blocks = project["targets"][1]["blocks"]
-    assert sum(1 for v in blocks.values() if v["opcode"] == "control_repeat_until") == 3
-    # verify chain includes all 3 loops
     flag = next(k for k, v in blocks.items() if v["opcode"] == "event_whenflagclicked")
     cur, ops = flag, []
     while cur:
         ops.append(blocks[cur]["opcode"])
         cur = blocks[cur].get("next")
     assert ops.count("control_repeat_until") == 3, ops
+    assert "teachableMachine_modelMatches" in {
+        v["opcode"] for v in blocks.values()
+    }
     with zipfile.ZipFile(OUTPUT, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr(
             "project.json",
@@ -516,7 +436,7 @@ def main() -> None:
         )
         for name, data in assets:
             z.writestr(name, data)
-    print("Created", OUTPUT)
+    print("Created", OUTPUT, "chain loops=", ops.count("control_repeat_until"))
 
 
 if __name__ == "__main__":
