@@ -1,47 +1,33 @@
-# Dự án chấm công bằng Teachable Machine
+# Dự án chấm công - giống bài mẫu Thu Trang
 
-File dự án: `cham-cong-teachable-machine.sb3`
+File: `cham-cong-teachable-machine.sb3`
 
-## Quan trọng: tên class phải khớp
+## Giống bài mẫu của bạn
 
-Trên Teachable Machine, tên 3 class phải **giống hệt** trong chương trình:
+- 3 class Teachable Machine: **Trang**, **Thỏ**, **rắn**
+- Danh sách: **Danh sách chấm công**
+- Phím **`a`** để bắt đầu chấm công
+- Broadcast **Thời gian chấm công** / **Hết giờ**
+- Nhận diện bằng khối **`prediction is`**
+- Báo vắng: Thu Trang, Thỏ, rắn
 
-- `Trang`
-- `Binh`
-- `Chi`
+## Cách dùng
 
-Khi nhìn camera, ô `model prediction` phải hiện đúng tên người đang được gọi ở `nguoi_dang_cho`.
+1. Mở <https://playground.raise.mit.edu/create/>
+2. **File → Load from your computer** → chọn file `.sb3`
+3. Dán link Teachable Machine vào khối `use model`
+4. Bấm **cờ xanh** (tải model)
+5. Bấm phím **`a`** để chấm công
+6. Lần lượt từng người nhìn camera trong 10 giây
+7. Khi hết giờ → báo đủ người hoặc vắng
 
-Ví dụ: nếu `model prediction` = `Trang` nhưng chương trình gọi `An` → sẽ **luôn báo vắng**.
+## Khác bài mẫu (đã sửa cho chạy ổn hơn)
 
-Đổi tên trong file `create_attendance_sb3.py` dòng `MEMBERS = (...)` nếu bạn dùng tên khác, rồi chạy `python3 create_attendance_sb3.py`.
+Bài mẫu chỉ kiểm tra `prediction is` **một lần** sau phím `a` nên dễ bỏ sót.
 
-## Cách mở
+File này thêm **vòng lặp liên tục** trong lúc đếm ngược để nhận diện đúng khi nhìn camera.
 
-1. Mở <https://playground.raise.mit.edu/create/>.
-2. **File → Load from your computer** → chọn `cham-cong-teachable-machine.sb3`.
-3. Dán link Teachable Machine vào khối `use model`.
-4. Bấm cờ xanh, cho phép camera.
+## Sprites
 
-## Cách chấm công
-
-1. Đợi 5 giây tải model.
-2. Lượt **Trang** → nhìn camera 15 giây.
-3. Lượt **Binh** → nhìn camera 15 giây.
-4. Lượt **Chi** → nhìn camera 15 giây.
-5. Kết quả: đủ người hoặc báo vắng.
-
-## Màn hình
-
-- `nguoi_dang_cho`: ai đang được gọi
-- `person_time`: giây còn lại
-- `model prediction`: AI đang nhận ra ai
-- `danh_sach_cham_cong`: danh sách bên phải
-
-## Kiểm tra nhanh
-
-| `nguoi_dang_cho` | `model prediction` | Kết quả |
-|---|---|---|
-| Trang | Trang | Chấm công thành công |
-| Trang | Background | Chưa nhận — nhìn rõ hơn / huấn luyện lại |
-| Trang | Binh | Sai người — đợi đúng lượt |
+- **Avery**: logic chấm công
+- **Bang dem**: đếm ngược `time` và phát **Hết giờ**

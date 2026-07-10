@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a RAISE Playground .sb3 attendance project."""
+"""Generate attendance SB3 matching the Thu Trang sample project style."""
 
 from __future__ import annotations
 
@@ -11,38 +11,13 @@ from pathlib import Path
 
 OUTPUT = Path(__file__).with_name("cham-cong-teachable-machine.sb3")
 MODEL_URL = "Paste your Teachable Machine model URL here!"
-# Ten 3 class phai TRUNG KHOP voi Teachable Machine (xem o model prediction)
-MEMBERS = ("Trang", "Binh", "Chi")
-SECONDS_PER_PERSON = 15
-MODEL_LOAD_SECONDS = 5
-ATTENDANCE_LIST_ID = "attendance_list_id"
-ATTENDANCE_LIST_NAME = "danh_sach_cham_cong"
-
-
-def member_den_name(name: str) -> str:
-    return f"{name}_den"
-
-
-def member_var_id(name: str) -> str:
-    slug = "".join(char.lower() if char.isalnum() else "_" for char in name)
-    slug = "_".join(part for part in slug.split("_") if part)
-    return f"{slug}_var"
-
-
-def build_member_maps() -> tuple[dict[str, tuple[str, str]], dict[str, tuple[str, str, int]]]:
-    member_variables: dict[str, tuple[str, str]] = {}
-    member_status: dict[str, tuple[str, str, int]] = {}
-    for index, member in enumerate(MEMBERS, start=1):
-        member_variables[member] = (member_den_name(member), member_var_id(member))
-        member_status[member] = (
-            f"{member}: chua den",
-            f"{member}: da den",
-            index,
-        )
-    return member_variables, member_status
-
-
-MEMBER_VARIABLES, MEMBER_STATUS = build_member_maps()
+MEMBERS = ("Trang", "Thỏ", "rắn")
+ABSENT_LABELS = ("Thu Trang", "Thỏ", "rắn")
+ATTENDANCE_SECONDS = 10
+LIST_ID = "attendance_list_id"
+LIST_NAME = "Danh sách chấm công"
+BROADCAST_START = "Thời gian chấm công"
+BROADCAST_END = "Hết giờ"
 
 
 class ProjectBuilder:
@@ -63,8 +38,8 @@ class ProjectBuilder:
         fields: dict | None = None,
         shadow: bool = False,
         top_level: bool = False,
-        x: int | None = None,
-        y: int | None = None,
+        x: int = 0,
+        y: int = 0,
         prefix: str = "block",
     ) -> str:
         block_id = self.identifier(prefix)
@@ -78,8 +53,8 @@ class ProjectBuilder:
             "topLevel": top_level,
         }
         if top_level:
-            value["x"] = x or 0
-            value["y"] = y or 0
+            value["x"] = x
+            value["y"] = y
         self.blocks[block_id] = value
         return block_id
 
@@ -89,38 +64,10 @@ class ProjectBuilder:
     def number_input(self, value: int | float) -> list:
         return [1, [4, str(value)]]
 
-    def variable_reporter(self, name: str, variable_id: str, parent: str) -> str:
-        return self.block(
-            "data_variable",
-            parent=parent,
-            fields={"VARIABLE": [name, variable_id]},
-            prefix=f"read_{name}",
-        )
-
-    def equals_variable(
-        self, name: str, variable_id: str, expected: int, parent: str
-    ) -> str:
-        equals_id = self.block("operator_equals", parent=parent, prefix="equals")
-        variable_block = self.variable_reporter(name, variable_id, equals_id)
-        self.blocks[equals_id]["inputs"] = {
-            "OPERAND1": [2, variable_block],
-            "OPERAND2": self.number_input(expected),
-        }
-        return equals_id
-
-    def set_variable(
-        self, name: str, variable_id: str, value: str | int, parent: str
-    ) -> str:
-        value_input = (
-            self.number_input(value) if isinstance(value, int) else self.text_input(value)
-        )
-        return self.block(
-            "data_setvariableto",
-            parent=parent,
-            inputs={"VALUE": value_input},
-            fields={"VARIABLE": [name, variable_id]},
-            prefix=f"set_{name}",
-        )
+    def link(self, *block_ids: str) -> None:
+        for current, following in zip(block_ids, block_ids[1:]):
+            self.blocks[current]["next"] = following
+            self.blocks[following]["parent"] = current
 
     def say(self, message: str, seconds: int, parent: str) -> str:
         return self.block(
@@ -133,63 +80,7 @@ class ProjectBuilder:
             prefix="say",
         )
 
-    def delete_all_list(self, list_name: str, list_id: str, parent: str) -> str:
-        return self.block(
-            "data_deletealloflist",
-            parent=parent,
-            fields={"LIST": [list_name, list_id]},
-            prefix="clear_list",
-        )
-
-    def add_to_list(
-        self, item: str, list_name: str, list_id: str, parent: str
-    ) -> str:
-        return self.block(
-            "data_addtolist",
-            parent=parent,
-            fields={"LIST": [list_name, list_id]},
-            inputs={"ITEM": self.text_input(item)},
-            prefix="add_list",
-        )
-
-    def replace_list_item(
-        self, index: int, item: str, list_name: str, list_id: str, parent: str
-    ) -> str:
-        block_id = self.block(
-            "data_replaceitemoflist",
-            parent=parent,
-            fields={"LIST": [list_name, list_id]},
-            prefix="replace_list",
-        )
-        self.blocks[block_id]["inputs"] = {
-            "INDEX": self.number_input(index),
-            "ITEM": self.text_input(item),
-        }
-        return block_id
-
-    def prediction_matches_current(self, parent: str) -> str:
-        equals_id = self.block("operator_equals", parent=parent, prefix="pred_current")
-        prediction = self.block(
-            "teachableMachine_modelPrediction",
-            parent=equals_id,
-            prefix="pred_value",
-        )
-        current_person = self.variable_reporter("nguoi_dang_cho", "current_var", equals_id)
-        self.blocks[equals_id]["inputs"] = {
-            "OPERAND1": [2, prediction],
-            "OPERAND2": [2, current_person],
-        }
-        return equals_id
-
-    def or_condition(self, left_id: str, right_id: str, parent: str) -> str:
-        or_id = self.block("operator_or", parent=parent, prefix="or")
-        self.blocks[or_id]["inputs"] = {
-            "OPERAND1": [2, left_id],
-            "OPERAND2": [2, right_id],
-        }
-        return or_id
-
-    def wait_seconds(self, seconds: float, parent: str, prefix: str = "wait") -> str:
+    def wait(self, seconds: float, parent: str, prefix: str = "wait") -> str:
         return self.block(
             "control_wait",
             parent=parent,
@@ -197,222 +88,134 @@ class ProjectBuilder:
             prefix=prefix,
         )
 
-    def link(self, *block_ids: str) -> None:
-        for current, following in zip(block_ids, block_ids[1:]):
-            self.blocks[current]["next"] = following
-            self.blocks[following]["parent"] = current
+    def broadcast(self, message: str, parent: str) -> str:
+        return self.block(
+            "event_broadcast",
+            parent=parent,
+            fields={"BROADCAST_INPUT": [message, message]},
+            prefix="broadcast",
+        )
+
+    def list_item_equals_zero(self, index: int, parent: str) -> str:
+        equals_id = self.block("operator_equals", parent=parent, prefix="item_zero")
+        item = self.block(
+            "data_itemoflist",
+            parent=equals_id,
+            fields={"LIST": [LIST_NAME, LIST_ID]},
+            prefix="item",
+        )
+        self.blocks[item]["inputs"] = {"INDEX": self.number_input(index)}
+        self.blocks[equals_id]["inputs"] = {
+            "OPERAND1": [2, item],
+            "OPERAND2": self.number_input(0),
+        }
+        return equals_id
+
+    def item_not_zero(self, index: int, parent: str) -> str:
+        not_id = self.block("operator_not", parent=parent, prefix="not_zero")
+        zero_eq = self.list_item_equals_zero(index, not_id)
+        self.blocks[not_id]["inputs"] = {"OPERAND": [2, zero_eq]}
+        return not_id
+
+    def all_slots_filled(self, parent: str) -> str:
+        first = self.item_not_zero(1, parent)
+        current = first
+        for index in range(2, len(MEMBERS) + 1):
+            next_check = self.item_not_zero(index, parent)
+            combined = self.block("operator_and", parent=parent, prefix="filled_and")
+            self.blocks[combined]["inputs"] = {
+                "OPERAND1": [2, current],
+                "OPERAND2": [2, next_check],
+            }
+            self.blocks[current]["parent"] = combined
+            current = combined
+        return current
+
+    def prediction_is(self, member: str, parent: str) -> str:
+        return self.block(
+            "teachableMachine_modelMatches",
+            parent=parent,
+            fields={"CLASS_NAME": [member, None]},
+            prefix=f"pred_{member}",
+        )
+
+    def replace_list_item(self, index: int, value: str, parent: str) -> str:
+        block_id = self.block(
+            "data_replaceitemoflist",
+            parent=parent,
+            fields={"LIST": [LIST_NAME, LIST_ID]},
+            prefix="replace",
+        )
+        self.blocks[block_id]["inputs"] = {
+            "INDEX": self.number_input(index),
+            "ITEM": self.text_input(value),
+        }
+        return block_id
 
 
-def create_assets() -> tuple[tuple[str, bytes], tuple[str, bytes]]:
+def create_assets() -> tuple[tuple[str, bytes], tuple[str, bytes], tuple[str, bytes]]:
     stage_svg = b"""<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360">
-<rect width="480" height="360" fill="#f4f7fb"/>
-<rect x="20" y="20" width="440" height="320" rx="18" fill="#ffffff" stroke="#4c97ff" stroke-width="4"/>
-<text x="240" y="62" text-anchor="middle" font-family="Arial" font-size="25" font-weight="bold" fill="#24508f">BANG CHAM CONG AI</text>
-<rect x="292" y="24" width="168" height="210" rx="12" fill="#ffffff" stroke="#24508f" stroke-width="3"/>
-<text x="376" y="48" text-anchor="middle" font-family="Arial" font-size="14" font-weight="bold" fill="#24508f">DANH SACH</text>
-<text x="240" y="320" text-anchor="middle" font-family="Arial" font-size="15" fill="#555">Luot cham cong: tung nguoi nhin camera 15 giay</text>
+<rect width="480" height="360" fill="#87ceeb"/>
+<rect x="250" y="20" width="210" height="220" rx="10" fill="#fff" stroke="#333" stroke-width="2"/>
+<text x="355" y="45" text-anchor="middle" font-family="Arial" font-size="14" font-weight="bold">Danh sach cham cong</text>
 </svg>"""
-    sprite_svg = b"""<svg xmlns="http://www.w3.org/2000/svg" width="190" height="190">
-<circle cx="95" cy="95" r="86" fill="#4c97ff"/>
-<circle cx="95" cy="68" r="32" fill="#ffffff"/>
-<path d="M35 154c8-38 31-57 60-57s52 19 60 57" fill="#ffffff"/>
-<path d="M55 150l24 20 54-62" fill="none" stroke="#59c059" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+    avery_svg = b"""<svg xmlns="http://www.w3.org/2000/svg" width="120" height="180">
+<circle cx="60" cy="45" r="28" fill="#f2c094"/>
+<rect x="30" y="75" width="60" height="80" rx="12" fill="#8d6e63"/>
+<rect x="18" y="85" width="18" height="55" rx="8" fill="#f2c094"/>
+<rect x="84" y="85" width="18" height="55" rx="8" fill="#f2c094"/>
 </svg>"""
-    stage_name = hashlib.md5(stage_svg).hexdigest() + ".svg"
-    sprite_name = hashlib.md5(sprite_svg).hexdigest() + ".svg"
-    return (stage_name, stage_svg), (sprite_name, sprite_svg)
-
-
-def build_mark_member(builder: ProjectBuilder, member: str, parent: str) -> str:
-    variable_name, variable_id = MEMBER_VARIABLES[member]
-    detect_if = builder.block("control_if", parent=parent, prefix=f"detect_{member}")
-    detected = builder.prediction_matches_current(detect_if)
-    confirm_if = builder.block("control_if", parent=detect_if, prefix=f"confirm_{member}")
-    is_new = builder.equals_variable(variable_name, variable_id, 0, confirm_if)
-    mark_present = builder.set_variable(variable_name, variable_id, 1, confirm_if)
-    update_list = builder.replace_list_item(
-        MEMBER_STATUS[member][2],
-        MEMBER_STATUS[member][1],
-        ATTENDANCE_LIST_NAME,
-        ATTENDANCE_LIST_ID,
-        mark_present,
+    counter_svg = b"""<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80">
+<rect width="120" height="80" rx="8" fill="#1b5e20"/>
+<text x="60" y="52" text-anchor="middle" font-family="Arial" font-size="36" fill="#69f0ae">09</text>
+</svg>"""
+    return (
+        (hashlib.md5(stage_svg).hexdigest() + ".svg", stage_svg),
+        (hashlib.md5(avery_svg).hexdigest() + ".svg", avery_svg),
+        (hashlib.md5(counter_svg).hexdigest() + ".svg", counter_svg),
     )
-    success = builder.say(f"{member} da cham cong thanh cong!", 2, update_list)
-    builder.link(mark_present, update_list, success)
-    builder.blocks[confirm_if]["inputs"] = {
-        "CONDITION": [2, is_new],
-        "SUBSTACK": [2, mark_present],
+
+
+def costume(asset: tuple[str, bytes], name: str, cx: int, cy: int) -> dict:
+    filename, _ = asset
+    return {
+        "assetId": filename.removesuffix(".svg"),
+        "name": name,
+        "bitmapResolution": 1,
+        "md5ext": filename,
+        "dataFormat": "svg",
+        "rotationCenterX": cx,
+        "rotationCenterY": cy,
+    }
+
+
+def build_detection_for_member(
+    builder: ProjectBuilder, member: str, index: int, parent: str
+) -> str:
+    detect_if = builder.block("control_if", parent=parent, prefix=f"if_{member}")
+    prediction = builder.prediction_is(member, detect_if)
+    slot_if = builder.block("control_if", parent=detect_if, prefix=f"slot_{member}")
+    slot_empty = builder.list_item_equals_zero(index, slot_if)
+    hello = builder.say(f"Xin chao {member}!", 2, slot_if)
+    replace_item = builder.replace_list_item(index, member, hello)
+    builder.link(hello, replace_item)
+    builder.blocks[slot_if]["inputs"] = {
+        "CONDITION": [2, slot_empty],
+        "SUBSTACK": [2, hello],
     }
     builder.blocks[detect_if]["inputs"] = {
-        "CONDITION": [2, detected],
-        "SUBSTACK": [2, confirm_if],
+        "CONDITION": [2, prediction],
+        "SUBSTACK": [2, slot_if],
     }
     return detect_if
 
 
-def build_member_turn(builder: ProjectBuilder, member: str, parent: str) -> tuple[str, str]:
-    variable_name, variable_id = MEMBER_VARIABLES[member]
-    set_timer = builder.set_variable(
-        "person_time", "person_time_var", SECONDS_PER_PERSON, parent
-    )
-    set_current = builder.set_variable(
-        "nguoi_dang_cho", "current_var", member, set_timer
-    )
-    prompt = builder.say(
-        f"Luot cham cong: {member} - hay nhin thang vao camera!", 3, set_current
-    )
-    repeat = builder.block("control_repeat_until", parent=prompt, prefix=f"wait_{member}")
-    is_marked = builder.equals_variable(variable_name, variable_id, 1, repeat)
-    timer_done = builder.equals_variable("person_time", "person_time_var", 0, repeat)
-    stop_condition = builder.or_condition(is_marked, timer_done, repeat)
-    detect = build_mark_member(builder, member, repeat)
-    wait = builder.wait_seconds(1, detect, prefix=f"pause_{member}")
-    decrement = builder.block(
-        "data_changevariableby",
-        parent=wait,
-        inputs={"VALUE": builder.number_input(-1)},
-        fields={"VARIABLE": ["person_time", "person_time_var"]},
-        prefix=f"tick_{member}",
-    )
-    builder.link(detect, wait, decrement)
-    builder.blocks[repeat]["inputs"] = {
-        "CONDITION": [2, stop_condition],
-        "SUBSTACK": [2, detect],
-    }
-    missed_if = builder.block("control_if", parent=repeat, prefix=f"missed_{member}")
-    still_missing = builder.equals_variable(variable_name, variable_id, 0, missed_if)
-    missed_say = builder.say(
-        f"Khong nhan dien duoc {member}. Hay thu lai hoac kiem tra model.", 2, missed_if
-    )
-    builder.blocks[missed_if]["inputs"] = {
-        "CONDITION": [2, still_missing],
-        "SUBSTACK": [2, missed_say],
-    }
-    builder.link(set_timer, set_current, prompt, repeat, missed_if)
-    return set_timer, missed_if
-
-
-def build_all_present_condition(builder: ProjectBuilder, parent: str) -> str:
-    first_member = MEMBERS[0]
-    first_name, first_id = MEMBER_VARIABLES[first_member]
-    condition = builder.equals_variable(first_name, first_id, 1, parent)
-    for member in MEMBERS[1:]:
-        variable_name, variable_id = MEMBER_VARIABLES[member]
-        member_ok = builder.equals_variable(variable_name, variable_id, 1, parent)
-        combined = builder.block("operator_and", parent=parent, prefix="and_present")
-        builder.blocks[combined]["inputs"] = {
-            "OPERAND1": [2, condition],
-            "OPERAND2": [2, member_ok],
-        }
-        builder.blocks[condition]["parent"] = combined
-        condition = combined
-    return condition
-
-
-def build_final_report(builder: ProjectBuilder, parent: str) -> str:
-    final_if = builder.block("control_if_else", parent=parent, prefix="final_check")
-    and_all = build_all_present_condition(builder, final_if)
-    full_message = builder.say("Moi nguoi da den day du!", 4, final_if)
-
-    missing_start = builder.set_variable("result", "result_var", "Vang: ", final_if)
-    missing_checks: list[str] = []
-    previous = missing_start
-    for member in MEMBERS:
-        variable_name, variable_id = MEMBER_VARIABLES[member]
-        check = builder.block("control_if", parent=previous, prefix=f"missing_{member}")
-        condition = builder.equals_variable(variable_name, variable_id, 0, check)
-        set_result = builder.block(
-            "data_setvariableto",
-            parent=check,
-            fields={"VARIABLE": ["result", "result_var"]},
-            prefix=f"append_{member}",
-        )
-        join = builder.block("operator_join", parent=set_result, prefix="join")
-        result_reporter = builder.variable_reporter("result", "result_var", join)
-        builder.blocks[join]["inputs"] = {
-            "STRING1": [2, result_reporter],
-            "STRING2": builder.text_input(member + " "),
-        }
-        builder.blocks[set_result]["inputs"] = {"VALUE": [2, join]}
-        builder.blocks[check]["inputs"] = {
-            "CONDITION": [2, condition],
-            "SUBSTACK": [2, set_result],
-        }
-        missing_checks.append(check)
-        previous = check
-    missing_say = builder.block(
-        "looks_sayforsecs",
-        parent=previous,
-        inputs={"SECS": builder.number_input(4)},
-        prefix="say_missing",
-    )
-    result_reporter = builder.variable_reporter("result", "result_var", missing_say)
-    builder.blocks[missing_say]["inputs"]["MESSAGE"] = [2, result_reporter]
-    builder.link(missing_start, *missing_checks, missing_say)
-    builder.blocks[final_if]["inputs"] = {
-        "CONDITION": [2, and_all],
-        "SUBSTACK": [2, full_message],
-        "SUBSTACK2": [2, missing_start],
-    }
-    return final_if
-
-
-def build_project() -> dict:
+def build_avery_blocks() -> tuple[dict, dict]:
     builder = ProjectBuilder()
-    variables = {
-        "person_time_var": ["person_time", SECONDS_PER_PERSON],
-        "current_var": ["nguoi_dang_cho", ""],
-        "result_var": ["result", ""],
-    }
-    for member in MEMBERS:
-        den_name, var_id = MEMBER_VARIABLES[member]
-        variables[var_id] = [den_name, 0]
 
+    # Khoi 1: khi bam co xanh
     flag = builder.block(
-        "event_whenflagclicked",
-        top_level=True,
-        x=35,
-        y=35,
-        prefix="green_flag",
-    )
-    initializers = [
-        builder.set_variable("person_time", "person_time_var", SECONDS_PER_PERSON, flag),
-        builder.set_variable("nguoi_dang_cho", "current_var", "", flag),
-        builder.set_variable("result", "result_var", "", flag),
-    ]
-    for member in MEMBERS:
-        den_name, var_id = MEMBER_VARIABLES[member]
-        initializers.append(builder.set_variable(den_name, var_id, 0, flag))
-    clear_list = builder.delete_all_list(
-        ATTENDANCE_LIST_NAME, ATTENDANCE_LIST_ID, flag
-    )
-    list_initializers = [
-        builder.add_to_list(
-            MEMBER_STATUS[member][0],
-            ATTENDANCE_LIST_NAME,
-            ATTENDANCE_LIST_ID,
-            flag,
-        )
-        for member in MEMBERS
-    ]
-    video = builder.block(
-        "teachableMachine_videoToggle",
-        parent=flag,
-        prefix="video_on",
-    )
-    video_menu = builder.block(
-        "teachableMachine_menu_VIDEO_STATE",
-        parent=video,
-        fields={"VIDEO_STATE": ["on", None]},
-        shadow=True,
-        prefix="video_menu",
-    )
-    builder.blocks[video]["inputs"] = {"VIDEO_STATE": [1, video_menu]}
-    transparency = builder.block(
-        "teachableMachine_setVideoTransparency",
-        parent=flag,
-        inputs={"TRANSPARENCY": builder.number_input(35)},
-        prefix="video_transparency",
+        "event_whenflagclicked", top_level=True, x=20, y=20, prefix="flag"
     )
     use_model = builder.block(
         "teachableMachine_useModelBlock",
@@ -420,118 +223,253 @@ def build_project() -> dict:
         inputs={"MODEL_URL": builder.text_input(MODEL_URL)},
         prefix="use_model",
     )
-    load_wait = builder.wait_seconds(MODEL_LOAD_SECONDS, flag, prefix="load_wait")
-    welcome = builder.say(
-        "Chuan bi cham cong lan luot tung nguoi. Moi nguoi co 15 giay.", 3, flag
+    transparency = builder.block(
+        "teachableMachine_setVideoTransparency",
+        parent=flag,
+        inputs={"TRANSPARENCY": builder.number_input(20)},
+        prefix="transparency",
     )
+    builder.link(flag, use_model, transparency)
 
-    turn_starts: list[str] = []
-    turn_ends: list[str] = []
-    for member in MEMBERS:
-        first, last = build_member_turn(builder, member, flag)
-        turn_starts.append(first)
-        turn_ends.append(last)
-
-    for index in range(len(turn_starts) - 1):
-        builder.link(turn_ends[index], turn_starts[index + 1])
-
-    final_report = build_final_report(builder, turn_ends[-1])
-
-    builder.link(
-        flag,
-        *initializers,
-        clear_list,
-        *list_initializers,
-        video,
-        transparency,
-        use_model,
-        load_wait,
-        welcome,
+    # Khoi 2: phim a bat dau cham cong
+    key_a = builder.block(
+        "event_whenkeypressed",
+        fields={"KEY_OPTION": ["a", None]},
+        top_level=True,
+        x=20,
+        y=180,
+        prefix="key_a",
     )
-    builder.link(welcome, turn_starts[0])
-    builder.link(turn_ends[-1], final_report)
+    clear_list = builder.block(
+        "data_deletealloflist",
+        parent=key_a,
+        fields={"LIST": [LIST_NAME, LIST_ID]},
+        prefix="clear",
+    )
+    init_slots = []
+    parent = clear_list
+    for _ in MEMBERS:
+        add_zero = builder.block(
+            "data_addtolist",
+            parent=parent,
+            fields={"LIST": [LIST_NAME, LIST_ID]},
+            inputs={"ITEM": builder.number_input(0)},
+            prefix="add_zero",
+        )
+        init_slots.append(add_zero)
+        parent = add_zero
+    intro = builder.say("Bảng chấm công", 3, parent)
+    video_on = builder.block("teachableMachine_videoToggle", parent=intro, prefix="video_on")
+    video_menu = builder.block(
+        "teachableMachine_menu_VIDEO_STATE",
+        parent=video_on,
+        fields={"VIDEO_STATE": ["on", None]},
+        shadow=True,
+        prefix="video_menu",
+    )
+    builder.blocks[video_on]["inputs"] = {"VIDEO_STATE": [1, video_menu]}
+    start_timer = builder.broadcast(BROADCAST_START, video_on)
+    builder.link(key_a, clear_list, *init_slots, intro, video_on, start_timer)
+
+    # Khoi 3: nhan dien lien tuc trong thoi gian cham cong
+    receive_start = builder.block(
+        "event_whenbroadcastreceived",
+        fields={"BROADCAST_OPTION": [BROADCAST_START, BROADCAST_START]},
+        top_level=True,
+        x=420,
+        y=20,
+        prefix="recv_start",
+    )
+    repeat = builder.block("control_repeat_until", parent=receive_start, prefix="repeat")
+    time_done = builder.block("operator_equals", parent=repeat, prefix="time_done")
+    time_value = builder.block(
+        "data_variable",
+        parent=time_done,
+        fields={"VARIABLE": ["time", "time_var"]},
+        prefix="time_value",
+    )
+    builder.blocks[time_done]["inputs"] = {
+        "OPERAND1": [2, time_value],
+        "OPERAND2": builder.number_input(0),
+    }
+    detect_blocks = []
+    for index, member in enumerate(MEMBERS, start=1):
+        parent_for = detect_blocks[-1] if detect_blocks else repeat
+        detect = build_detection_for_member(builder, member, index, parent_for)
+        detect_blocks.append(detect)
+    pause = builder.wait(0.2, detect_blocks[-1], prefix="pause")
+    builder.link(*detect_blocks, pause)
+    builder.blocks[repeat]["inputs"] = {
+        "CONDITION": [2, time_done],
+        "SUBSTACK": [2, detect_blocks[0]],
+    }
+
+    # Khoi 4: ket qua khi het gio
+    receive_end = builder.block(
+        "event_whenbroadcastreceived",
+        fields={"BROADCAST_OPTION": [BROADCAST_END, BROADCAST_END]},
+        top_level=True,
+        x=420,
+        y=360,
+        prefix="recv_end",
+    )
+    full_if = builder.block("control_if_else", parent=receive_end, prefix="full_if")
+    full_condition = builder.all_slots_filled(full_if)
+    full_say = builder.say("Mọi người đã đến đầy đủ", 2, full_if)
+    missing_checks = []
+    parent_missing = full_if
+    for index, label in enumerate(ABSENT_LABELS, start=1):
+        check = builder.block("control_if", parent=parent_missing, prefix=f"miss_{index}")
+        still_empty = builder.list_item_equals_zero(index, check)
+        absent_say = builder.say(f"Vắng {label}", 2, check)
+        builder.blocks[check]["inputs"] = {
+            "CONDITION": [2, still_empty],
+            "SUBSTACK": [2, absent_say],
+        }
+        missing_checks.append(check)
+        parent_missing = check
+    builder.link(*missing_checks)
+    builder.blocks[full_if]["inputs"] = {
+        "CONDITION": [2, full_condition],
+        "SUBSTACK": [2, full_say],
+        "SUBSTACK2": [2, missing_checks[0]],
+    }
+    video_off = builder.block("teachableMachine_videoToggle", parent=parent_missing, prefix="video_off")
+    off_menu = builder.block(
+        "teachableMachine_menu_VIDEO_STATE",
+        parent=video_off,
+        fields={"VIDEO_STATE": ["off", None]},
+        shadow=True,
+        prefix="off_menu",
+    )
+    builder.blocks[video_off]["inputs"] = {"VIDEO_STATE": [1, off_menu]}
+    builder.link(receive_end, full_if, video_off)
 
     comments = {
-        "model_comment": {
+        "help": {
             "blockId": use_model,
-            "x": 420,
-            "y": 80,
-            "width": 300,
-            "height": 150,
+            "x": 260,
+            "y": 40,
+            "width": 280,
+            "height": 120,
             "minimized": False,
             "text": (
-                "Ten class tren Teachable Machine phai trung: "
-                + ", ".join(MEMBERS)
-                + ". model prediction phai giong nguoi_dang_cho."
+                "Giong bai mau: dan link model, bam phim a de cham cong. "
+                "Class phai la: Trang, Tho, ran."
             ),
         }
     }
+    return builder.blocks, comments
 
-    stage_asset, sprite_asset = create_assets()
-    stage_name, _ = stage_asset
-    sprite_name, _ = sprite_asset
-    stage_md5 = stage_name.removesuffix(".svg")
-    sprite_md5 = sprite_name.removesuffix(".svg")
-    attendance_list = [MEMBER_STATUS[member][0] for member in MEMBERS]
 
+def build_counter_blocks() -> dict:
+    builder = ProjectBuilder()
+    receive = builder.block(
+        "event_whenbroadcastreceived",
+        fields={"BROADCAST_OPTION": [BROADCAST_START, BROADCAST_START]},
+        top_level=True,
+        x=40,
+        y=40,
+        prefix="counter_recv",
+    )
+    set_time = builder.block(
+        "data_setvariableto",
+        parent=receive,
+        fields={"VARIABLE": ["time", "time_var"]},
+        inputs={"VALUE": builder.number_input(ATTENDANCE_SECONDS)},
+        prefix="set_time",
+    )
+    repeat = builder.block("control_repeat", parent=set_time, prefix="repeat")
+    builder.blocks[repeat]["inputs"] = {"TIMES": builder.number_input(ATTENDANCE_SECONDS)}
+    wait = builder.wait(1, repeat, prefix="tick_wait")
+    decrement = builder.block(
+        "data_changevariableby",
+        parent=wait,
+        fields={"VARIABLE": ["time", "time_var"]},
+        inputs={"VALUE": builder.number_input(-1)},
+        prefix="tick",
+    )
+    builder.link(wait, decrement)
+    builder.blocks[repeat]["inputs"]["SUBSTACK"] = [2, wait]
+    end_broadcast = builder.broadcast(BROADCAST_END, repeat)
+    builder.link(receive, set_time, repeat, end_broadcast)
+    return builder.blocks
+
+
+def build_project() -> dict:
+    stage_assets = create_assets()
+    stage_file, avery_file, counter_file = stage_assets
+    avery_blocks, comments = build_avery_blocks()
+    counter_blocks = build_counter_blocks()
+
+    initial_list = [0, 0, 0]
     return {
         "targets": [
             {
                 "isStage": True,
                 "name": "Stage",
-                "variables": variables,
-                "lists": {
-                    ATTENDANCE_LIST_ID: [ATTENDANCE_LIST_NAME, attendance_list],
+                "variables": {
+                    "time_var": ["time", ATTENDANCE_SECONDS],
                 },
-                "broadcasts": {},
+                "lists": {
+                    LIST_ID: [LIST_NAME, initial_list],
+                },
+                "broadcasts": {
+                    BROADCAST_START: BROADCAST_START,
+                    BROADCAST_END: BROADCAST_END,
+                },
                 "blocks": {},
                 "comments": {},
                 "currentCostume": 0,
                 "costumes": [
-                    {
-                        "assetId": stage_md5,
-                        "name": "Bang cham cong",
-                        "md5ext": stage_name,
-                        "dataFormat": "svg",
-                        "rotationCenterX": 240,
-                        "rotationCenterY": 180,
-                    }
+                    costume(stage_file, "San khau", 240, 180),
                 ],
                 "sounds": [],
                 "volume": 100,
                 "layerOrder": 0,
                 "tempo": 60,
-                "videoTransparency": 35,
-                "videoState": "on",
+                "videoTransparency": 20,
+                "videoState": "off",
                 "textToSpeechLanguage": None,
             },
             {
                 "isStage": False,
-                "name": "Cham cong",
+                "name": "Avery",
                 "variables": {},
                 "lists": {},
                 "broadcasts": {},
-                "blocks": builder.blocks,
+                "blocks": avery_blocks,
                 "comments": comments,
                 "currentCostume": 0,
-                "costumes": [
-                    {
-                        "assetId": sprite_md5,
-                        "name": "Nhan vien",
-                        "bitmapResolution": 1,
-                        "md5ext": sprite_name,
-                        "dataFormat": "svg",
-                        "rotationCenterX": 95,
-                        "rotationCenterY": 95,
-                    }
-                ],
+                "costumes": [costume(avery_file, "Avery", 60, 90)],
+                "sounds": [],
+                "volume": 100,
+                "layerOrder": 2,
+                "visible": True,
+                "x": -150,
+                "y": -20,
+                "size": 80,
+                "direction": 90,
+                "draggable": False,
+                "rotationStyle": "all around",
+            },
+            {
+                "isStage": False,
+                "name": "Bang dem",
+                "variables": {},
+                "lists": {},
+                "broadcasts": {},
+                "blocks": counter_blocks,
+                "comments": {},
+                "currentCostume": 0,
+                "costumes": [costume(counter_file, "Dem", 60, 40)],
                 "sounds": [],
                 "volume": 100,
                 "layerOrder": 1,
                 "visible": True,
-                "x": 0,
-                "y": -15,
-                "size": 65,
+                "x": 150,
+                "y": 100,
+                "size": 100,
                 "direction": 90,
                 "draggable": False,
                 "rotationStyle": "all around",
@@ -539,61 +477,45 @@ def build_project() -> dict:
         ],
         "monitors": [
             {
-                "id": "current_var",
-                "mode": "default",
-                "opcode": "data_variable",
-                "params": {"VARIABLE": "nguoi_dang_cho"},
-                "spriteName": None,
-                "value": "",
-                "width": 0,
-                "height": 0,
-                "x": 10,
-                "y": 10,
-                "visible": True,
-                "sliderMin": 0,
-                "sliderMax": 100,
-                "isDiscrete": True,
-            },
-            {
-                "id": "person_time_var",
-                "mode": "default",
-                "opcode": "data_variable",
-                "params": {"VARIABLE": "person_time"},
-                "spriteName": None,
-                "value": SECONDS_PER_PERSON,
-                "width": 0,
-                "height": 0,
-                "x": 10,
-                "y": 40,
-                "visible": True,
-                "sliderMin": 0,
-                "sliderMax": SECONDS_PER_PERSON,
-                "isDiscrete": True,
-            },
-            {
-                "id": ATTENDANCE_LIST_ID,
+                "id": LIST_ID,
                 "mode": "list",
                 "opcode": "data_listcontents",
-                "params": {"LIST": ATTENDANCE_LIST_NAME},
+                "params": {"LIST": LIST_NAME},
                 "spriteName": None,
-                "value": attendance_list,
+                "value": initial_list,
                 "width": 0,
                 "height": 0,
-                "x": 292,
-                "y": 8,
+                "x": 255,
+                "y": 15,
                 "visible": True,
+            },
+            {
+                "id": "time_var",
+                "mode": "default",
+                "opcode": "data_variable",
+                "params": {"VARIABLE": "time"},
+                "spriteName": None,
+                "value": ATTENDANCE_SECONDS,
+                "width": 0,
+                "height": 0,
+                "x": 150,
+                "y": 65,
+                "visible": True,
+                "sliderMin": 0,
+                "sliderMax": ATTENDANCE_SECONDS,
+                "isDiscrete": True,
             },
             {
                 "id": "prediction_monitor",
                 "mode": "default",
                 "opcode": "teachableMachine_modelPrediction",
                 "params": {},
-                "spriteName": "Cham cong",
+                "spriteName": "Avery",
                 "value": "",
                 "width": 0,
                 "height": 0,
-                "x": 10,
-                "y": 70,
+                "x": 12,
+                "y": 12,
                 "visible": True,
                 "sliderMin": 0,
                 "sliderMax": 100,
@@ -604,39 +526,38 @@ def build_project() -> dict:
         "meta": {
             "semver": "3.0.0",
             "vm": "11.1.0",
-            "agent": "Cursor - RAISE Playground attendance project",
+            "agent": "Cursor - Thu Trang attendance style",
         },
     }
 
 
-def validate_execution_chain(project: dict) -> None:
-    blocks = project["targets"][1]["blocks"]
-    flag = next(k for k, v in blocks.items() if v["opcode"] == "event_whenflagclicked")
-    visited = set()
-    current = flag
-    opcodes: list[str] = []
-    while current and current not in visited:
-        visited.add(current)
-        opcodes.append(blocks[current]["opcode"])
-        current = blocks[current].get("next")
-    if "control_repeat_until" not in opcodes:
-        raise ValueError("Attendance loop missing from main script chain")
-    if opcodes.index("control_repeat_until") > opcodes.index("teachableMachine_useModelBlock"):
-        return
-    raise ValueError("Attendance loop appears before model load")
+def validate_project(project: dict) -> None:
+    avery = next(t for t in project["targets"] if t["name"] == "Avery")
+    opcodes = {block["opcode"] for block in avery["blocks"].values()}
+    required = {
+        "event_whenkeypressed",
+        "teachableMachine_useModelBlock",
+        "control_repeat_until",
+        "teachableMachine_modelMatches",
+        "event_whenbroadcastreceived",
+    }
+    missing = required - opcodes
+    if missing:
+        raise ValueError(f"Missing opcodes: {missing}")
 
 
 def main() -> None:
     project = build_project()
-    validate_execution_chain(project)
-    stage_asset, sprite_asset = create_assets()
+    validate_project(project)
+    stage_file, avery_file, counter_file = create_assets()
     with zipfile.ZipFile(OUTPUT, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(
             "project.json",
             json.dumps(project, ensure_ascii=False, separators=(",", ":")),
         )
-        archive.writestr(*stage_asset)
-        archive.writestr(*sprite_asset)
+        archive.writestr(*stage_file)
+        archive.writestr(*avery_file)
+        archive.writestr(*counter_file)
     print(f"Created {OUTPUT}")
 
 
