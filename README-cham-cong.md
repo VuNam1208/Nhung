@@ -1,17 +1,23 @@
 # Chấm công 5 giây
 
-## Cách dùng
+## Cách dùng (bắt buộc làm đủ)
 
-1. Mở https://playground.raise.mit.edu/create/
-2. **File → Load from your computer** → `cham-cong-teachable-machine.sb3`
-3. Dán link Teachable Machine vào `use model`
-4. Bấm **cờ xanh**
-5. Nhìn camera trong **5 giây**
-6. Nhận ra → hiện "Xin chao ..." và cập nhật danh sách
-7. Hết 5 giây → báo đủ người hoặc vắng
+1. Tải `cham-cong-teachable-machine.sb3`
+2. Mở https://playground.raise.mit.edu/create/
+3. **File → Load from your computer**
+4. **Dán link Teachable Machine** vào khối `use model` (không để dòng Paste URL...)
+5. Bấm **cờ xanh**
+6. Đợi 3 giây tải model
+7. Nhìn camera **5 giây**
 
-## Class model
+## Khi chạy phải thấy
 
-- `Trang`
-- `Thỏ`
-- `rắn`
+- Bong bóng: `Dang nhin: Trang` (hoặc Thỏ / rắn)
+- Danh sách bên phải đổi `?` → `Trang`
+- Bong bóng: `OK Trang da cham cong!`
+
+Nếu `Dang nhin:` trống hoặc tên khác → model chưa đúng / tên class không khớp.
+
+## Class trên Teachable Machine
+
+Phải đúng: `Trang`, `Thỏ`, `rắn`
