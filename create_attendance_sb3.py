@@ -9,7 +9,7 @@ import zipfile
 from pathlib import Path
 
 OUTPUT = Path(__file__).with_name("cham-cong-teachable-machine.sb3")
-MODEL_URL = "https://teachablemachine.withgoogle.com/models/Xn7QBPSIY/"
+MODEL_URL = "https://teachablemachine.withgoogle.com/models/Xn7QBPSlY/"
 MEMBERS = ("Trang", "Thỏ", "rắn")
 SECONDS = 5
 LIST_ID = "list1"
