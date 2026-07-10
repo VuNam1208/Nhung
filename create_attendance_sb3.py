@@ -145,6 +145,22 @@ class ProjectBuilder:
         }
         return block_id
 
+    def prediction_is(self, member: str, parent: str) -> str:
+        return self.block(
+            "teachableMachine_modelMatches",
+            parent=parent,
+            fields={"CLASS_NAME": [member, None]},
+            prefix=f"pred_{member}",
+        )
+
+    def wait_seconds(self, seconds: float, parent: str, prefix: str = "wait") -> str:
+        return self.block(
+            "control_wait",
+            parent=parent,
+            inputs={"DURATION": self.number_input(seconds)},
+            prefix=prefix,
+        )
+
     def link(self, *block_ids: str) -> None:
         for current, following in zip(block_ids, block_ids[1:]):
             self.blocks[current]["next"] = following
@@ -239,6 +255,7 @@ def build_project() -> dict:
         inputs={"MODEL_URL": builder.text_input(MODEL_URL)},
         prefix="use_model",
     )
+    load_wait = builder.wait_seconds(3, flag, prefix="load_wait")
     welcome = builder.say(
         "BAT DAU CHAM CONG - Nhin vao camera trong 15 giay!", 2, flag
     )
@@ -335,6 +352,7 @@ def build_project() -> dict:
         video,
         transparency,
         use_model,
+        load_wait,
         welcome,
         repeat,
         finish,
@@ -347,30 +365,37 @@ def build_project() -> dict:
             "x": 420,
             "y": 80,
             "width": 280,
-            "height": 110,
+            "height": 130,
             "minimized": False,
             "text": (
-                "Thay noi dung trong use model bang link Teachable Machine "
-                "cua ban. Model can co 3 class dung ten: An, Binh, Chi."
+                "Thay link Teachable Machine cua ban. Ten class phai dung: "
+                "An, Binh, Chi. Sau khi bam co xanh, doi 3 giay de model tai."
             ),
         }
     }
 
-    for index, member in enumerate(MEMBERS):
+    scan_flag = builder.block(
+        "event_whenflagclicked",
+        top_level=True,
+        x=35,
+        y=900,
+        prefix="scan_flag",
+    )
+    scan_wait = builder.wait_seconds(3, scan_flag, prefix="scan_wait")
+    scan_forever = builder.block("control_forever", parent=scan_wait, prefix="scan_forever")
+    scan_open = builder.block("control_if", parent=scan_forever, prefix="scan_open")
+    scan_is_open = builder.equals_variable("done", "done_var", 0, scan_open)
+    member_scan_blocks: list[str] = []
+    for member in MEMBERS:
         variable_name, variable_id = member_variables[member]
-        hat = builder.block(
-            "teachableMachine_whenModelMatches",
-            fields={"CLASS_NAME": [member, None]},
-            top_level=True,
-            x=760,
-            y=35 + index * 245,
-            prefix=f"detect_{member}",
+        parent_for_member = member_scan_blocks[-1] if member_scan_blocks else scan_open
+        member_if = builder.block(
+            "control_if", parent=parent_for_member, prefix=f"scan_{member}"
         )
-        outer_if = builder.block("control_if", parent=hat, prefix="if_open")
-        is_open = builder.equals_variable("done", "done_var", 0, outer_if)
-        inner_if = builder.block("control_if", parent=outer_if, prefix="if_new")
-        is_new = builder.equals_variable(variable_name, variable_id, 0, inner_if)
-        mark_present = builder.set_variable(variable_name, variable_id, 1, inner_if)
+        prediction = builder.prediction_is(member, member_if)
+        member_new_if = builder.block("control_if", parent=member_if, prefix=f"scan_new_{member}")
+        is_new = builder.equals_variable(variable_name, variable_id, 0, member_new_if)
+        mark_present = builder.set_variable(variable_name, variable_id, 1, member_new_if)
         update_list = builder.replace_list_item(
             MEMBER_STATUS[member][2],
             MEMBER_STATUS[member][1],
@@ -378,17 +403,25 @@ def build_project() -> dict:
             ATTENDANCE_LIST_ID,
             mark_present,
         )
-        announce = builder.say(f"{member} da den!", 2, update_list)
-        builder.link(mark_present, update_list, announce)
-        builder.blocks[inner_if]["inputs"] = {
+        builder.link(mark_present, update_list)
+        builder.blocks[member_new_if]["inputs"] = {
             "CONDITION": [2, is_new],
             "SUBSTACK": [2, mark_present],
         }
-        builder.blocks[outer_if]["inputs"] = {
-            "CONDITION": [2, is_open],
-            "SUBSTACK": [2, inner_if],
+        builder.blocks[member_if]["inputs"] = {
+            "CONDITION": [2, prediction],
+            "SUBSTACK": [2, member_new_if],
         }
-        builder.link(hat, outer_if)
+        member_scan_blocks.append(member_if)
+    builder.link(*member_scan_blocks)
+    scan_pause = builder.wait_seconds(0.3, scan_forever, prefix="scan_pause")
+    builder.blocks[scan_open]["inputs"] = {
+        "CONDITION": [2, scan_is_open],
+        "SUBSTACK": [2, member_scan_blocks[0]],
+    }
+    builder.link(scan_open, scan_pause)
+    builder.blocks[scan_forever]["inputs"] = {"SUBSTACK": [2, scan_open]}
+    builder.link(scan_flag, scan_wait, scan_forever)
 
     stage_asset, sprite_asset = create_assets()
     stage_name, _ = stage_asset
@@ -490,6 +523,22 @@ def build_project() -> dict:
                 "x": 292,
                 "y": 8,
                 "visible": True,
+            },
+            {
+                "id": "prediction_monitor",
+                "mode": "default",
+                "opcode": "teachableMachine_modelPrediction",
+                "params": {},
+                "spriteName": "Cham cong",
+                "value": "",
+                "width": 0,
+                "height": 0,
+                "x": 10,
+                "y": 48,
+                "visible": True,
+                "sliderMin": 0,
+                "sliderMax": 100,
+                "isDiscrete": True,
             },
         ],
         "extensions": ["teachableMachine"],
