@@ -13,6 +13,13 @@ OUTPUT = Path(__file__).with_name("cham-cong-teachable-machine.sb3")
 MODEL_URL = "Paste your Teachable Machine model URL here!"
 MEMBERS = ("An", "Binh", "Chi")
 ATTENDANCE_SECONDS = 15
+ATTENDANCE_LIST_ID = "attendance_list_id"
+ATTENDANCE_LIST_NAME = "danh_sach_cham_cong"
+MEMBER_STATUS = {
+    "An": ("An: chua den", "An: da den", 1),
+    "Binh": ("Binh: chua den", "Binh: da den", 2),
+    "Chi": ("Chi: chua den", "Chi: da den", 3),
+}
 
 
 class ProjectBuilder:
@@ -104,6 +111,40 @@ class ProjectBuilder:
             prefix="say",
         )
 
+    def delete_all_list(self, list_name: str, list_id: str, parent: str) -> str:
+        return self.block(
+            "data_deletealloflist",
+            parent=parent,
+            fields={"LIST": [list_name, list_id]},
+            prefix="clear_list",
+        )
+
+    def add_to_list(
+        self, item: str, list_name: str, list_id: str, parent: str
+    ) -> str:
+        return self.block(
+            "data_addtolist",
+            parent=parent,
+            fields={"LIST": [list_name, list_id]},
+            inputs={"ITEM": self.text_input(item)},
+            prefix="add_list",
+        )
+
+    def replace_list_item(
+        self, index: int, item: str, list_name: str, list_id: str, parent: str
+    ) -> str:
+        block_id = self.block(
+            "data_replaceitemoflist",
+            parent=parent,
+            fields={"LIST": [list_name, list_id]},
+            prefix="replace_list",
+        )
+        self.blocks[block_id]["inputs"] = {
+            "INDEX": self.number_input(index),
+            "ITEM": self.text_input(item),
+        }
+        return block_id
+
     def link(self, *block_ids: str) -> None:
         for current, following in zip(block_ids, block_ids[1:]):
             self.blocks[current]["next"] = following
@@ -115,7 +156,9 @@ def create_assets() -> tuple[tuple[str, bytes], tuple[str, bytes]]:
 <rect width="480" height="360" fill="#f4f7fb"/>
 <rect x="20" y="20" width="440" height="320" rx="18" fill="#ffffff" stroke="#4c97ff" stroke-width="4"/>
 <text x="240" y="62" text-anchor="middle" font-family="Arial" font-size="25" font-weight="bold" fill="#24508f">BANG CHAM CONG AI</text>
-<text x="240" y="320" text-anchor="middle" font-family="Arial" font-size="15" fill="#555">Dung truoc camera de cham cong</text>
+<rect x="292" y="24" width="168" height="210" rx="12" fill="#ffffff" stroke="#24508f" stroke-width="3"/>
+<text x="376" y="48" text-anchor="middle" font-family="Arial" font-size="14" font-weight="bold" fill="#24508f">DANH SACH</text>
+<text x="240" y="320" text-anchor="middle" font-family="Arial" font-size="15" fill="#555">Nhin vao camera trong 15 giay</text>
 </svg>"""
     sprite_svg = b"""<svg xmlns="http://www.w3.org/2000/svg" width="190" height="190">
 <circle cx="95" cy="95" r="86" fill="#4c97ff"/>
@@ -158,6 +201,18 @@ def build_project() -> dict:
         builder.set_variable("Binh_den", "binh_var", 0, flag),
         builder.set_variable("Chi_den", "chi_var", 0, flag),
         builder.set_variable("result", "result_var", "", flag),
+    ]
+    clear_list = builder.delete_all_list(
+        ATTENDANCE_LIST_NAME, ATTENDANCE_LIST_ID, flag
+    )
+    list_initializers = [
+        builder.add_to_list(
+            MEMBER_STATUS[member][0],
+            ATTENDANCE_LIST_NAME,
+            ATTENDANCE_LIST_ID,
+            flag,
+        )
+        for member in MEMBERS
     ]
     video = builder.block(
         "teachableMachine_videoToggle",
@@ -275,6 +330,8 @@ def build_project() -> dict:
     builder.link(
         flag,
         *initializers,
+        clear_list,
+        *list_initializers,
         video,
         transparency,
         use_model,
@@ -314,8 +371,15 @@ def build_project() -> dict:
         inner_if = builder.block("control_if", parent=outer_if, prefix="if_new")
         is_new = builder.equals_variable(variable_name, variable_id, 0, inner_if)
         mark_present = builder.set_variable(variable_name, variable_id, 1, inner_if)
-        announce = builder.say(f"{member} da den!", 2, mark_present)
-        builder.link(mark_present, announce)
+        update_list = builder.replace_list_item(
+            MEMBER_STATUS[member][2],
+            MEMBER_STATUS[member][1],
+            ATTENDANCE_LIST_NAME,
+            ATTENDANCE_LIST_ID,
+            mark_present,
+        )
+        announce = builder.say(f"{member} da den!", 2, update_list)
+        builder.link(mark_present, update_list, announce)
         builder.blocks[inner_if]["inputs"] = {
             "CONDITION": [2, is_new],
             "SUBSTACK": [2, mark_present],
@@ -332,13 +396,17 @@ def build_project() -> dict:
     stage_md5 = stage_name.removesuffix(".svg")
     sprite_md5 = sprite_name.removesuffix(".svg")
 
+    attendance_list = [MEMBER_STATUS[member][0] for member in MEMBERS]
+
     return {
         "targets": [
             {
                 "isStage": True,
                 "name": "Stage",
                 "variables": variables,
-                "lists": {},
+                "lists": {
+                    ATTENDANCE_LIST_ID: [ATTENDANCE_LIST_NAME, attendance_list],
+                },
                 "broadcasts": {},
                 "blocks": {},
                 "comments": {},
@@ -409,7 +477,20 @@ def build_project() -> dict:
                 "sliderMin": 0,
                 "sliderMax": ATTENDANCE_SECONDS,
                 "isDiscrete": True,
-            }
+            },
+            {
+                "id": ATTENDANCE_LIST_ID,
+                "mode": "list",
+                "opcode": "data_listcontents",
+                "params": {"LIST": ATTENDANCE_LIST_NAME},
+                "spriteName": None,
+                "value": attendance_list,
+                "width": 0,
+                "height": 0,
+                "x": 292,
+                "y": 8,
+                "visible": True,
+            },
         ],
         "extensions": ["teachableMachine"],
         "meta": {
