@@ -11,21 +11,38 @@ from pathlib import Path
 
 OUTPUT = Path(__file__).with_name("cham-cong-teachable-machine.sb3")
 MODEL_URL = "Paste your Teachable Machine model URL here!"
-MEMBERS = ("An", "Binh", "Chi")
+# Ten 3 class phai TRUNG KHOP voi Teachable Machine (xem o model prediction)
+MEMBERS = ("Trang", "Binh", "Chi")
 SECONDS_PER_PERSON = 15
 MODEL_LOAD_SECONDS = 5
 ATTENDANCE_LIST_ID = "attendance_list_id"
 ATTENDANCE_LIST_NAME = "danh_sach_cham_cong"
-MEMBER_STATUS = {
-    "An": ("An: chua den", "An: da den", 1),
-    "Binh": ("Binh: chua den", "Binh: da den", 2),
-    "Chi": ("Chi: chua den", "Chi: da den", 3),
-}
-MEMBER_VARIABLES = {
-    "An": ("An_den", "an_var"),
-    "Binh": ("Binh_den", "binh_var"),
-    "Chi": ("Chi_den", "chi_var"),
-}
+
+
+def member_den_name(name: str) -> str:
+    return f"{name}_den"
+
+
+def member_var_id(name: str) -> str:
+    slug = "".join(char.lower() if char.isalnum() else "_" for char in name)
+    slug = "_".join(part for part in slug.split("_") if part)
+    return f"{slug}_var"
+
+
+def build_member_maps() -> tuple[dict[str, tuple[str, str]], dict[str, tuple[str, str, int]]]:
+    member_variables: dict[str, tuple[str, str]] = {}
+    member_status: dict[str, tuple[str, str, int]] = {}
+    for index, member in enumerate(MEMBERS, start=1):
+        member_variables[member] = (member_den_name(member), member_var_id(member))
+        member_status[member] = (
+            f"{member}: chua den",
+            f"{member}: da den",
+            index,
+        )
+    return member_variables, member_status
+
+
+MEMBER_VARIABLES, MEMBER_STATUS = build_member_maps()
 
 
 class ProjectBuilder:
@@ -150,24 +167,17 @@ class ProjectBuilder:
         }
         return block_id
 
-    def prediction_is(self, member: str, parent: str) -> str:
-        return self.block(
-            "teachableMachine_modelMatches",
-            parent=parent,
-            fields={"CLASS_NAME": [member, None]},
-            prefix=f"pred_{member}",
-        )
-
-    def prediction_equals(self, member: str, parent: str) -> str:
-        equals_id = self.block("operator_equals", parent=parent, prefix="pred_eq")
+    def prediction_matches_current(self, parent: str) -> str:
+        equals_id = self.block("operator_equals", parent=parent, prefix="pred_current")
         prediction = self.block(
             "teachableMachine_modelPrediction",
             parent=equals_id,
             prefix="pred_value",
         )
+        current_person = self.variable_reporter("nguoi_dang_cho", "current_var", equals_id)
         self.blocks[equals_id]["inputs"] = {
             "OPERAND1": [2, prediction],
-            "OPERAND2": self.text_input(member),
+            "OPERAND2": [2, current_person],
         }
         return equals_id
 
@@ -216,11 +226,7 @@ def create_assets() -> tuple[tuple[str, bytes], tuple[str, bytes]]:
 def build_mark_member(builder: ProjectBuilder, member: str, parent: str) -> str:
     variable_name, variable_id = MEMBER_VARIABLES[member]
     detect_if = builder.block("control_if", parent=parent, prefix=f"detect_{member}")
-    detected = builder.or_condition(
-        builder.prediction_is(member, detect_if),
-        builder.prediction_equals(member, detect_if),
-        detect_if,
-    )
+    detected = builder.prediction_matches_current(detect_if)
     confirm_if = builder.block("control_if", parent=detect_if, prefix=f"confirm_{member}")
     is_new = builder.equals_variable(variable_name, variable_id, 0, confirm_if)
     mark_present = builder.set_variable(variable_name, variable_id, 1, confirm_if)
@@ -286,24 +292,26 @@ def build_member_turn(builder: ProjectBuilder, member: str, parent: str) -> tupl
     return set_timer, missed_if
 
 
+def build_all_present_condition(builder: ProjectBuilder, parent: str) -> str:
+    first_member = MEMBERS[0]
+    first_name, first_id = MEMBER_VARIABLES[first_member]
+    condition = builder.equals_variable(first_name, first_id, 1, parent)
+    for member in MEMBERS[1:]:
+        variable_name, variable_id = MEMBER_VARIABLES[member]
+        member_ok = builder.equals_variable(variable_name, variable_id, 1, parent)
+        combined = builder.block("operator_and", parent=parent, prefix="and_present")
+        builder.blocks[combined]["inputs"] = {
+            "OPERAND1": [2, condition],
+            "OPERAND2": [2, member_ok],
+        }
+        builder.blocks[condition]["parent"] = combined
+        condition = combined
+    return condition
+
+
 def build_final_report(builder: ProjectBuilder, parent: str) -> str:
     final_if = builder.block("control_if_else", parent=parent, prefix="final_check")
-    eq_an = builder.equals_variable("An_den", "an_var", 1, final_if)
-    eq_binh = builder.equals_variable("Binh_den", "binh_var", 1, final_if)
-    eq_chi = builder.equals_variable("Chi_den", "chi_var", 1, final_if)
-    and_left = builder.block(
-        "operator_and",
-        parent=final_if,
-        inputs={"OPERAND1": [2, eq_an], "OPERAND2": [2, eq_binh]},
-        prefix="and",
-    )
-    and_all = builder.block(
-        "operator_and",
-        parent=final_if,
-        inputs={"OPERAND1": [2, and_left], "OPERAND2": [2, eq_chi]},
-        prefix="and_all",
-    )
-    builder.blocks[and_left]["parent"] = and_all
+    and_all = build_all_present_condition(builder, final_if)
     full_message = builder.say("Moi nguoi da den day du!", 4, final_if)
 
     missing_start = builder.set_variable("result", "result_var", "Vang: ", final_if)
@@ -354,11 +362,11 @@ def build_project() -> dict:
     variables = {
         "person_time_var": ["person_time", SECONDS_PER_PERSON],
         "current_var": ["nguoi_dang_cho", ""],
-        "an_var": ["An_den", 0],
-        "binh_var": ["Binh_den", 0],
-        "chi_var": ["Chi_den", 0],
         "result_var": ["result", ""],
     }
+    for member in MEMBERS:
+        den_name, var_id = MEMBER_VARIABLES[member]
+        variables[var_id] = [den_name, 0]
 
     flag = builder.block(
         "event_whenflagclicked",
@@ -370,11 +378,11 @@ def build_project() -> dict:
     initializers = [
         builder.set_variable("person_time", "person_time_var", SECONDS_PER_PERSON, flag),
         builder.set_variable("nguoi_dang_cho", "current_var", "", flag),
-        builder.set_variable("An_den", "an_var", 0, flag),
-        builder.set_variable("Binh_den", "binh_var", 0, flag),
-        builder.set_variable("Chi_den", "chi_var", 0, flag),
         builder.set_variable("result", "result_var", "", flag),
     ]
+    for member in MEMBERS:
+        den_name, var_id = MEMBER_VARIABLES[member]
+        initializers.append(builder.set_variable(den_name, var_id, 0, flag))
     clear_list = builder.delete_all_list(
         ATTENDANCE_LIST_NAME, ATTENDANCE_LIST_ID, flag
     )
@@ -452,8 +460,9 @@ def build_project() -> dict:
             "height": 150,
             "minimized": False,
             "text": (
-                "Dan link Teachable Machine. Ten class phai dung: An, Binh, Chi. "
-                "Chuong trinh goi lan luot tung nguoi, moi nguoi 15 giay nhin camera."
+                "Ten class tren Teachable Machine phai trung: "
+                + ", ".join(MEMBERS)
+                + ". model prediction phai giong nguoi_dang_cho."
             ),
         }
     }

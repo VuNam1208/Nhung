@@ -2,40 +2,46 @@
 
 File dự án: `cham-cong-teachable-machine.sb3`
 
+## Quan trọng: tên class phải khớp
+
+Trên Teachable Machine, tên 3 class phải **giống hệt** trong chương trình:
+
+- `Trang`
+- `Binh`
+- `Chi`
+
+Khi nhìn camera, ô `model prediction` phải hiện đúng tên người đang được gọi ở `nguoi_dang_cho`.
+
+Ví dụ: nếu `model prediction` = `Trang` nhưng chương trình gọi `An` → sẽ **luôn báo vắng**.
+
+Đổi tên trong file `create_attendance_sb3.py` dòng `MEMBERS = (...)` nếu bạn dùng tên khác, rồi chạy `python3 create_attendance_sb3.py`.
+
 ## Cách mở
 
 1. Mở <https://playground.raise.mit.edu/create/>.
-2. Chọn **File → Load from your computer**.
-3. Chọn file `cham-cong-teachable-machine.sb3`.
-4. Trong khối `use model`, thay dòng hướng dẫn bằng URL mô hình Teachable Machine.
-5. Bấm cờ xanh và cho phép trình duyệt sử dụng camera.
+2. **File → Load from your computer** → chọn `cham-cong-teachable-machine.sb3`.
+3. Dán link Teachable Machine vào khối `use model`.
+4. Bấm cờ xanh, cho phép camera.
 
-## Cách chấm công (lần lượt từng người)
+## Cách chấm công
 
-1. Đợi 5 giây để mô hình tải xong.
-2. Chương trình gọi **An** → An nhìn thẳng camera trong **15 giây**.
-3. Nhận diện thành công → danh sách bên phải đổi `An: da den`.
-4. Tiếp theo gọi **Binh**, rồi **Chi** theo cùng cách.
-5. Cuối cùng thông báo đủ người hoặc ai vắng.
+1. Đợi 5 giây tải model.
+2. Lượt **Trang** → nhìn camera 15 giây.
+3. Lượt **Binh** → nhìn camera 15 giây.
+4. Lượt **Chi** → nhìn camera 15 giây.
+5. Kết quả: đủ người hoặc báo vắng.
 
-## Màn hình hiển thị
+## Màn hình
 
-- Góc trái: `nguoi_dang_cho` (người đang được gọi), `person_time` (giây còn lại), `model prediction` (AI đang nhận diện gì).
-- Góc phải: danh sách `danh_sach_cham_cong`.
+- `nguoi_dang_cho`: ai đang được gọi
+- `person_time`: giây còn lại
+- `model prediction`: AI đang nhận ra ai
+- `danh_sach_cham_cong`: danh sách bên phải
 
-## Cấu hình mặc định
+## Kiểm tra nhanh
 
-- Mỗi người có 15 giây nhìn camera.
-- Ba class của mô hình: `An`, `Binh`, `Chi`.
-
-Tên class trên Teachable Machine phải giống chính xác `An`, `Binh`, `Chi`.
-
-## Nếu vẫn không nhận diện
-
-1. Kiểm tra `model prediction` có hiện đúng tên khi nhìn camera không.
-2. Dán đúng link mô hình vào `use model`.
-3. Huấn luyện lại với nhiều ảnh khuôn mặt hơn cho từng người.
-4. Thêm class `Background` (ảnh không có người) trên Teachable Machine.
-5. Mỗi người chỉ đứng trước camera khi được gọi tên ở `nguoi_dang_cho`.
-
-Chạy `python3 create_attendance_sb3.py` để tạo lại file sau khi đổi cấu hình ở đầu script.
+| `nguoi_dang_cho` | `model prediction` | Kết quả |
+|---|---|---|
+| Trang | Trang | Chấm công thành công |
+| Trang | Background | Chưa nhận — nhìn rõ hơn / huấn luyện lại |
+| Trang | Binh | Sai người — đợi đúng lượt |
