@@ -12,6 +12,7 @@ STAGE_TEMPLATE = Path(
     "/tmp/uno/sunfounder-uno-and-mega-kit-master/scratch(uno)/code/1. Stage Mode.sb3"
 )
 OUTPUT = Path(__file__).with_name("cong-truong-an-toan-pictoblox.sb3")
+OUTPUT_PWM = Path(__file__).with_name("cong-truong-pwm-pictoblox.sb3")
 
 XE = {"do": "2", "vang": "3", "xanh": "4"}
 NGUOI = {"do": "5", "vang": "6", "xanh": "7"}
@@ -29,9 +30,10 @@ def scratch_id() -> str:
 
 
 class B:
-    def __init__(self) -> None:
+    def __init__(self, *, use_pwm: bool = False) -> None:
         self.blocks: dict[str, dict] = {}
         self.n = 0
+        self.use_pwm = use_pwm
 
     def nid(self, p: str = "b") -> str:
         self.n += 1
@@ -109,6 +111,15 @@ class B:
         )
 
     def servo(self, angle: str, parent: str | None = None) -> str:
+        if self.use_pwm:
+            # PWM 0-255; 0°~0, 90°~128 (works on pin 10)
+            pwm = str(int(int(angle) * 255 / 180))
+            return self.add(
+                "arduinoUno_setPwmPinOutput",
+                parent=parent,
+                fields={"PIN": [SERVO, None], "OUT": [pwm, None]},
+                prefix="pwm",
+            )
         return self.add(
             "actuators_setServoOnPinToAngle",
             parent=parent,
@@ -240,8 +251,8 @@ class B:
         return xe0, w2
 
 
-def build_camera_ai_sprite() -> dict:
-    b = B()
+def build_camera_ai_sprite(*, use_pwm: bool = False) -> dict:
+    b = B(use_pwm=use_pwm)
     flag = b.add("event_whenflagclicked", top=True, prefix="f")
     use = b.add(
         "teachableMachine_useModelBlock",
@@ -300,8 +311,8 @@ def build_camera_ai_sprite() -> dict:
     return b.blocks
 
 
-def build_arduino_sprite() -> dict:
-    b = B()
+def build_arduino_sprite(*, use_pwm: bool = False) -> dict:
+    b = B(use_pwm=use_pwm)
     flag = b.add("event_whenflagclicked", top=True, prefix="f")
     lcd0, lcd1 = b.lcd_init()
     t1_0, t1_1 = b.lcd_text("1", "1", "Cong Truong AT")
@@ -356,15 +367,20 @@ def validate_blocks(blocks: dict, label: str) -> None:
         raise SystemExit(f"{label}: orphan blocks {orphans}")
 
 
-def main() -> None:
+def write_sb3(
+    out: Path,
+    *,
+    use_pwm: bool,
+    agent: str,
+) -> tuple[int, int]:
     if not STAGE_TEMPLATE.exists():
         raise SystemExit(f"Missing template: {STAGE_TEMPLATE}")
 
     with zipfile.ZipFile(STAGE_TEMPLATE, "r") as zin:
         base = json.loads(zin.read("project.json"))
 
-    cam_blocks = build_camera_ai_sprite()
-    ard_blocks = build_arduino_sprite()
+    cam_blocks = build_camera_ai_sprite(use_pwm=use_pwm)
+    ard_blocks = build_arduino_sprite(use_pwm=use_pwm)
     validate_blocks(cam_blocks, "Camera AI")
     validate_blocks(ard_blocks, "Arduino Gate")
 
@@ -380,28 +396,31 @@ def main() -> None:
     ard["x"] = 120
 
     project = base
-    project["extensions"] = [
-        "arduinoUno",
-        "sensors",
-        "displayModule",
-        "actuators",
-        "teachableMachine",
-    ]
-    project["meta"]["agent"] = "cong-truong-an-toan-ai-v2"
+    extensions = ["arduinoUno", "sensors", "displayModule", "teachableMachine"]
+    if not use_pwm:
+        extensions.insert(3, "actuators")
+    project["extensions"] = extensions
+    project["meta"]["agent"] = agent
     project["targets"] = [stage, cam, ard]
 
     data = json.dumps(project, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     with zipfile.ZipFile(STAGE_TEMPLATE, "r") as zin, zipfile.ZipFile(
-        OUTPUT, "w", zipfile.ZIP_DEFLATED
+        out, "w", zipfile.ZIP_DEFLATED
     ) as zout:
         for item in zin.infolist():
             zout.writestr(
                 item, data if item.filename == "project.json" else zin.read(item.filename)
             )
 
-    print(f"Created: {OUTPUT}")
-    print(f"  Camera AI blocks: {len(cam_blocks)}")
-    print(f"  Arduino Gate blocks: {len(ard_blocks)}")
+    return len(cam_blocks), len(ard_blocks)
+
+
+def main() -> None:
+    c1, a1 = write_sb3(OUTPUT, use_pwm=False, agent="cong-truong-an-toan-ai-v3")
+    print(f"Created: {OUTPUT} (servo) — Camera {c1}, Arduino {a1}")
+
+    c2, a2 = write_sb3(OUTPUT_PWM, use_pwm=True, agent="cong-truong-an-toan-pwm-v1")
+    print(f"Created: {OUTPUT_PWM} (PWM pin 10) — Camera {c2}, Arduino {a2}")
 
 
 if __name__ == "__main__":
