@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import secrets
 import zipfile
 from pathlib import Path
 
@@ -25,7 +26,7 @@ PAIRS_L2 = (
     ("Happy", "Vui ve"),
 )
 
-MSG = {
+BROADCAST_LABELS = {
     "datLai": "datLai",
     "batDau": "batDau",
     "batCap1": "batCap1",
@@ -35,6 +36,11 @@ MSG = {
     "ghepSai": "ghepSai",
     "xongCap1": "xongCap1",
 }
+BROADCAST_IDS = {key: secrets.token_hex(10) for key in BROADCAST_LABELS}
+
+
+def scratch_id() -> str:
+    return secrets.token_hex(10)
 
 
 class B:
@@ -110,16 +116,18 @@ class B:
         self.blocks[eq]["inputs"] = {"OPERAND1": [2, ref], "OPERAND2": rhs}
         return eq
 
-    def on_msg(self, msg: str, x: int, y: int) -> str:
+    def on_msg(self, key: str, x: int, y: int) -> str:
         h = self.add("event_whenbroadcastreceived", top=True, x=x, y=y, prefix="wm")
-        self.blocks[h]["fields"] = {"BROADCAST_OPTION": [msg, MSG[msg]]}
+        self.blocks[h]["fields"] = {
+            "BROADCAST_OPTION": [BROADCAST_LABELS[key], BROADCAST_IDS[key]]
+        }
         return h
 
-    def broadcast(self, msg: str, parent: str | None = None) -> str:
+    def broadcast(self, key: str, parent: str | None = None) -> str:
         return self.add(
             "event_broadcast",
             parent=parent,
-            fields={"BROADCAST_OPTION": [msg, MSG[msg]]},
+            fields={"BROADCAST_OPTION": [BROADCAST_LABELS[key], BROADCAST_IDS[key]]},
             prefix="bc",
         )
 
@@ -197,6 +205,7 @@ def costume(fn: str, name: str, cx: int, cy: int) -> dict:
 def build_card(
     name: str,
     partner: str,
+    partner_id: str,
     label: str,
     color: str,
     x: int,
@@ -204,6 +213,7 @@ def build_card(
     layer: int,
     speed_slow: int,
     speed_fast: int,
+    sprite_id: str,
 ) -> tuple[dict, tuple[str, bytes]]:
     b = B()
     fn, svg = md5_asset(card_svg(label, color), "svg")
@@ -267,17 +277,17 @@ def build_card(
         "sensing_of",
         parent=gt,
         prefix="sx",
-        fields={"PROPERTY": ["x position", None], "OBJECT": [partner, None]},
+        fields={"PROPERTY": ["x position", None], "OBJECT": [partner, partner_id]},
     )
     sy = b.add(
         "sensing_of",
         parent=gt,
         prefix="sy",
-        fields={"PROPERTY": ["y position", None], "OBJECT": [partner, None]},
+        fields={"PROPERTY": ["y position", None], "OBJECT": [partner, partner_id]},
     )
     ox = b.add("operator_add", parent=gt, prefix="ox")
     b.blocks[ox]["inputs"] = {"NUM1": [2, sx], "NUM2": b.num(65)}
-    b.blocks[gt]["inputs"] = {"X": [3, ox, b.num(0)], "Y": [2, sy]}
+    b.blocks[gt]["inputs"] = {"X": [2, ox], "Y": [2, sy]}
     b.blocks[ifp]["inputs"] = {"CONDITION": [2, ba], "SUBSTACK": [2, gt]}
     b.blocks[gt]["parent"] = ifp
     b.blocks[lp2]["inputs"] = {"SUBSTACK": [2, ifp]}
@@ -310,7 +320,7 @@ def build_card(
     tc = b.add(
         "sensing_touchingobject",
         prefix="tc",
-        fields={"TOUCHINGOBJECTMENU": [partner, None]},
+        fields={"TOUCHINGOBJECTMENU": [partner, partner_id]},
     )
     b.blocks[ift]["inputs"] = {"CONDITION": [2, tc], "SUBSTACK": [2, None]}
     sp1 = b.set_var("daGhep", "v_paired", 1)
@@ -369,7 +379,7 @@ def build_card(
     tc3 = b.add(
         "sensing_touchingobject",
         prefix="tc3",
-        fields={"TOUCHINGOBJECTMENU": [partner, None]},
+        fields={"TOUCHINGOBJECTMENU": [partner, partner_id]},
     )
     p0 = b.eq_var("daGhep", "v_paired", 0, ifg)
     both2 = b.add("operator_and", prefix="b2")
@@ -384,6 +394,7 @@ def build_card(
     sprite = {
         "isStage": False,
         "name": name,
+        "id": sprite_id,
         "variables": {
             "v_paired": ["daGhep", 0],
             "v_drag": ["dangKeo", 0],
@@ -420,7 +431,15 @@ def add_show_on(b: B, msg: str, x: int, y: int) -> None:
     b.chain(h, b.add("looks_show", prefix="sh"))
 
 
-def build_button(name: str, label: str, msg: str, x: int, y: int, layer: int) -> tuple[dict, tuple[str, bytes]]:
+def build_button(
+    name: str,
+    label: str,
+    msg: str,
+    x: int,
+    y: int,
+    layer: int,
+    sprite_id: str,
+) -> tuple[dict, tuple[str, bytes]]:
     b = B()
     fn, svg = md5_asset(btn_svg(label), "svg")
     c = b.add("event_whenthisspriteclicked", top=True, x=40, y=40, prefix="c")
@@ -437,6 +456,7 @@ def build_button(name: str, label: str, msg: str, x: int, y: int, layer: int) ->
         {
             "isStage": False,
             "name": name,
+            "id": sprite_id,
             "variables": {},
             "lists": {},
             "broadcasts": {},
@@ -460,13 +480,37 @@ def build_button(name: str, label: str, msg: str, x: int, y: int, layer: int) ->
 
 
 def build_stage(assets: list[tuple[str, bytes]]) -> dict:
+    bds = [
+        ("Mo dau", backdrop_svg("TRO CHOI GHEP NOI", "Keo tu Anh sang nghia Viet", "#ecf0f1")),
+        ("Cap 1", backdrop_svg("CAP 1 - 5 cap tu", "Toc do cham", "#d5f5e3")),
+        ("Cap 2", backdrop_svg("CAP 2 - 5 cap tu", "Toc do nhanh hon", "#fdebd0")),
+        ("Ket thuc", backdrop_svg("CHUC MUNG!", "Ban da thang cuoc", "#fadbd8")),
+    ]
+    backdrop_ids: dict[str, str] = {}
+    costumes = []
+    for disp, svg in bds:
+        fn, data = md5_asset(svg, "svg")
+        asset_id = fn.split(".")[0]
+        backdrop_ids[disp] = asset_id
+        assets.append((fn, data))
+        costumes.append(
+            {
+                "name": disp,
+                "assetId": asset_id,
+                "md5ext": fn,
+                "dataFormat": "svg",
+                "rotationCenterX": 240,
+                "rotationCenterY": 180,
+            }
+        )
+
     b = B()
     f = b.add("event_whenflagclicked", top=True, x=20, y=20, prefix="f")
     b.chain(f, b.broadcast("datLai"))
 
     r = b.on_msg("datLai", 20, 120)
     sw = b.add("looks_switchbackdropto", prefix="sw")
-    b.blocks[sw]["fields"] = {"BACKDROP": ["Mo dau", "bd_intro"]}
+    b.blocks[sw]["fields"] = {"BACKDROP": ["Mo dau", backdrop_ids["Mo dau"]]}
     b.chain(
         r,
         sw,
@@ -476,7 +520,7 @@ def build_stage(assets: list[tuple[str, bytes]]) -> dict:
 
     s = b.on_msg("batDau", 200, 120)
     sw1 = b.add("looks_switchbackdropto", prefix="sw1")
-    b.blocks[sw1]["fields"] = {"BACKDROP": ["Cap 1", "bd_l1"]}
+    b.blocks[sw1]["fields"] = {"BACKDROP": ["Cap 1", backdrop_ids["Cap 1"]]}
     b.chain(
         s,
         sw1,
@@ -513,7 +557,7 @@ def build_stage(assets: list[tuple[str, bytes]]) -> dict:
 
     l2 = b.on_msg("batCap2", 200, 260)
     sw2 = b.add("looks_switchbackdropto", prefix="sw2")
-    b.blocks[sw2]["fields"] = {"BACKDROP": ["Cap 2", "bd_l2"]}
+    b.blocks[sw2]["fields"] = {"BACKDROP": ["Cap 2", backdrop_ids["Cap 2"]]}
     b.chain(
         l2,
         sw2,
@@ -539,7 +583,7 @@ def build_stage(assets: list[tuple[str, bytes]]) -> dict:
 
     wt = b.on_msg("thang", 20, 400)
     sw3 = b.add("looks_switchbackdropto", prefix="sw3")
-    b.blocks[sw3]["fields"] = {"BACKDROP": ["Ket thuc", "bd_win"]}
+    b.blocks[sw3]["fields"] = {"BACKDROP": ["Ket thuc", backdrop_ids["Ket thuc"]]}
     b.chain(
         wt,
         sw3,
@@ -550,36 +594,16 @@ def build_stage(assets: list[tuple[str, bytes]]) -> dict:
         ),
     )
 
-    bds = [
-        ("Mo dau", "bd_intro", backdrop_svg("TRO CHOI GHEP NOI", "Keo tu Anh sang nghia Viet", "#ecf0f1")),
-        ("Cap 1", "bd_l1", backdrop_svg("CAP 1 - 5 cap tu", "Toc do cham", "#d5f5e3")),
-        ("Cap 2", "bd_l2", backdrop_svg("CAP 2 - 5 cap tu", "Toc do nhanh hon", "#fdebd0")),
-        ("Ket thuc", "bd_win", backdrop_svg("CHUC MUNG!", "Ban da thang cuoc", "#fadbd8")),
-    ]
-    costumes = []
-    for disp, _, svg in bds:
-        fn, data = md5_asset(svg, "svg")
-        assets.append((fn, data))
-        costumes.append(
-            {
-                "name": disp,
-                "assetId": fn.split(".")[0],
-                "md5ext": fn,
-                "dataFormat": "svg",
-                "rotationCenterX": 240,
-                "rotationCenterY": 180,
-            }
-        )
-
     return {
         "isStage": True,
         "name": "Stage",
+        "id": scratch_id(),
         "variables": {"g_matched": ["soCapDaGhep", 0], "g_level": ["capDo", 0]},
         "lists": {
             "list_l1": ["danhSachCap1", [f"{a}-{b}" for a, b in PAIRS_L1]],
             "list_l2": ["danhSachCap2", [f"{a}-{b}" for a, b in PAIRS_L2]],
         },
-        "broadcasts": MSG,
+        "broadcasts": {BROADCAST_IDS[k]: BROADCAST_LABELS[k] for k in BROADCAST_LABELS},
         "blocks": b.blocks,
         "comments": {
             "n1": {
@@ -606,16 +630,22 @@ def build_stage(assets: list[tuple[str, bytes]]) -> dict:
 
 def build_project() -> tuple[dict, list[tuple[str, bytes]]]:
     assets: list[tuple[str, bytes]] = []
+    sprite_ids = {name: scratch_id() for name in [
+        "BtnBatDau", "BtnCapTiep",
+        *[f"EN{i}" for i in range(1, 6)], *[f"VI{i}" for i in range(1, 6)],
+        *[f"E2_{i}" for i in range(1, 6)], *[f"V2_{i}" for i in range(1, 6)],
+    ]}
+
     stage = build_stage(assets)
     targets = [stage]
     layer = 1
 
-    btn1, a1 = build_button("BtnBatDau", "Bat dau", "batDau", 0, -130, layer)
+    btn1, a1 = build_button("BtnBatDau", "Bat dau", "batDau", 0, -130, layer, sprite_ids["BtnBatDau"])
     assets.append(a1)
     targets.append(btn1)
     layer += 1
 
-    btn2, a2 = build_button("BtnCapTiep", "Cap tiep", "batCap2", 0, -130, layer)
+    btn2, a2 = build_button("BtnCapTiep", "Cap tiep", "batCap2", 0, -130, layer, sprite_ids["BtnCapTiep"])
     assets.append(a2)
     targets.append(btn2)
     layer += 1
@@ -626,20 +656,29 @@ def build_project() -> tuple[dict, list[tuple[str, bytes]]]:
 
     for i, ((en, vi), col) in enumerate(zip(PAIRS_L1, colors)):
         en_name, vi_name = f"EN{i+1}", f"VI{i+1}"
-        en, ae = build_card(en_name, vi_name, en, col, pos_en[i][0], pos_en[i][1], layer, 4, 8)
-        vi, av = build_card(vi_name, en_name, vi, col, pos_vi[i][0], pos_vi[i][1], layer + 1, 4, 8)
+        en, ae = build_card(
+            en_name, vi_name, sprite_ids[vi_name], en, col,
+            pos_en[i][0], pos_en[i][1], layer, 4, 8, sprite_ids[en_name],
+        )
+        vi, av = build_card(
+            vi_name, en_name, sprite_ids[en_name], vi, col,
+            pos_vi[i][0], pos_vi[i][1], layer + 1, 4, 8, sprite_ids[vi_name],
+        )
         assets.extend([ae, av])
         targets.extend([en, vi])
         layer += 2
 
-    # Level 2 labels on same sprites - update via say on batCap2 (costumes stay, labels in name)
-    # Rebuild with L2 text on batCap2 by extra sprites would duplicate; use same 5 pairs
-    # Different words for L2 - add EN6-10 / VI6-10 hidden on L1, shown on L2
     colors2 = ["#e67e22", "#2980b9", "#8e44ad", "#27ae60", "#d35400"]
     for i, ((en, vi), col) in enumerate(zip(PAIRS_L2, colors2)):
         en_name, vi_name = f"E2_{i+1}", f"V2_{i+1}"
-        en, ae = build_card(en_name, vi_name, en, col, pos_en[i][0], pos_en[i][1], layer, 5, 10)
-        vi, av = build_card(vi_name, en_name, vi, col, pos_vi[i][0], pos_vi[i][1], layer + 1, 5, 10)
+        en, ae = build_card(
+            en_name, vi_name, sprite_ids[vi_name], en, col,
+            pos_en[i][0], pos_en[i][1], layer, 5, 10, sprite_ids[en_name],
+        )
+        vi, av = build_card(
+            vi_name, en_name, sprite_ids[en_name], vi, col,
+            pos_vi[i][0], pos_vi[i][1], layer + 1, 5, 10, sprite_ids[vi_name],
+        )
         assets.extend([ae, av])
         targets.extend([en, vi])
         layer += 2
@@ -679,7 +718,7 @@ def build_project() -> tuple[dict, list[tuple[str, bytes]]]:
             }
         ],
         "extensions": [],
-        "meta": {"semver": "3.0.0", "vm": "11.2.0", "agent": "ghep-noi-v2"},
+        "meta": {"semver": "3.0.0", "vm": "11.2.0", "agent": "ghep-noi-v3"},
     }
     return project, assets
 
