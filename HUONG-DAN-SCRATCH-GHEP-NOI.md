@@ -1,7 +1,9 @@
 # Huong dan tai Tro choi Ghep noi len Scratch
 
 ## File
-- `tro-choi-ghep-noi.sb3`
+- `tro-choi-ghep-noi.sb3` (ban da sua loi mo file - agent ghep-noi-v3)
+
+> Neu truoc do bao "Tai file du an that bai", hay tai lai file moi tu link duoi.
 
 ## Cach dua vao project Scratch cua ban
 Link project: https://scratch.mit.edu/projects/1367711565/editor
