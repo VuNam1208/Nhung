@@ -1,9 +1,24 @@
 # Huong dan tai Tro choi Ghep noi len Scratch
 
 ## File
-- `tro-choi-ghep-noi.sb3` (ban da sua loi mo file - agent ghep-noi-v3)
+- `tro-choi-ghep-noi.sb3` — ban **v4** (da sua loi Scratch 3.29)
+- `test-scratch-mo-file.sb3` — file thu nho de kiem tra Scratch mo duoc file khong
 
-> Neu truoc do bao "Tai file du an that bai", hay tai lai file moi tu link duoi.
+> **Quan trong:** Xoa file cu tren may, tai lai file moi tu link duoi.
+
+## Link tai (ban v4 moi nhat)
+
+https://github.com/VuNam1208/Nhung/raw/cursor/matching-game-scratch-6e7f/tro-choi-ghep-noi.sb3
+
+File thu: https://github.com/VuNam1208/Nhung/raw/cursor/matching-game-scratch-6e7f/test-scratch-mo-file.sb3
+
+## Neu van loi "Tai file du an that bai"
+
+1. Mo `test-scratch-mo-file.sb3` truoc — neu file nay cung loi thi Scratch/cach tai file co van de
+2. Tai file bang **Save link as** (Luu lien ket thanh), khong mo link tren trinh duyet roi Save trang web
+3. Kiem tra ten file dung `.sb3` (khong phai `.sb3.txt`)
+4. Kich thuoc `tro-choi-ghep-noi.sb3` khoang **18–20 KB**
+5. Thu mo bang Scratch Online: https://scratch.mit.edu/projects/editor/ → File → Load from your computer
 
 ## Cach dua vao project Scratch cua ban
 Link project: https://scratch.mit.edu/projects/1367711565/editor

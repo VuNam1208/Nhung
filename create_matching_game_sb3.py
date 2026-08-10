@@ -36,7 +36,16 @@ BROADCAST_LABELS = {
     "ghepSai": "ghepSai",
     "xongCap1": "xongCap1",
 }
-BROADCAST_IDS = {key: secrets.token_hex(10) for key in BROADCAST_LABELS}
+BROADCAST_IDS = {
+    "datLai": "bcastDatLai001",
+    "batDau": "bcastBatDau001",
+    "batCap1": "bcastCap10001",
+    "batCap2": "bcastCap20001",
+    "thang": "bcastThang0001",
+    "ghepDung": "bcastDung0001",
+    "ghepSai": "bcastSai00001",
+    "xongCap1": "bcastXongC001",
+}
 
 
 def scratch_id() -> str:
@@ -131,35 +140,13 @@ class B:
             prefix="bc",
         )
 
-    def custom_def(self, proccode: str, procid: str, x: int, y: int) -> str:
-        d = self.add("procedures_definition", top=True, x=x, y=y, prefix="pd")
-        mut = {
-            "tagName": "mutation",
-            "proccode": proccode,
-            "procid": procid,
-            "argumentids": "[]",
-            "argumentnames": "[]",
-            "argumentdefaults": "[]",
-            "warp": False,
-        }
-        self.blocks[d]["mutation"] = mut
-        p = self.add("procedures_prototype", parent=d, shadow=True, prefix="pp")
-        self.blocks[p]["mutation"] = dict(mut)
-        self.blocks[d]["inputs"] = {"custom_block": [1, p]}
-        return d
-
-    def custom_call(self, proccode: str, procid: str, parent: str | None = None) -> str:
-        c = self.add("procedures_call", parent=parent, prefix="pc")
-        self.blocks[c]["mutation"] = {
-            "tagName": "mutation",
-            "proccode": proccode,
-            "procid": procid,
-            "argumentids": "[]",
-            "argumentnames": "[]",
-            "argumentdefaults": "[]",
-            "warp": False,
-        }
-        return c
+    def play_pop(self, parent: str | None = None) -> str:
+        return self.add(
+            "sound_play",
+            parent=parent,
+            fields={"SOUND_MENU": ["pop", "83a9787d4cb6f3b7632b4ddfebf74367"]},
+            prefix="snd",
+        )
 
 
 def md5_asset(data: bytes, ext: str) -> tuple[str, bytes]:
@@ -351,13 +338,8 @@ def build_card(
     nt = b.add("operator_not", prefix="nt")
     b.blocks[nt]["inputs"] = {"OPERAND": [2, tc2]}
     b.blocks[ife]["inputs"] = {"CONDITION": [2, nt], "SUBSTACK": [2, None]}
-    wrong = b.custom_call("phat hieu ung sai", "proc_wrong", ife)
-    b.blocks[ife]["inputs"]["SUBSTACK"] = [2, wrong]
-
-    wd = b.custom_def("phat hieu ung sai", "proc_wrong", 520, 20)
     sb = b.add(
         "looks_sayforsecs",
-        parent=wd,
         prefix="sb",
         inputs={"MESSAGE": b.txt("Chua dung!"), "SECS": b.num(1)},
     )
@@ -369,7 +351,8 @@ def build_card(
         inputs={"CHANGE": b.num(30)},
     )
     bbc = b.broadcast("ghepSai", fx)
-    b.chain(wd, sb, fx, bbc)
+    b.blocks[ife]["inputs"]["SUBSTACK"] = [2, sb]
+    b.chain(sb, fx, bbc)
     b.chain(ift, ife)
     b.chain(ck, if0)
 
@@ -594,6 +577,11 @@ def build_stage(assets: list[tuple[str, bytes]]) -> dict:
         ),
     )
 
+    gs = b.on_msg("ghepSai", 520, 120)
+    b.chain(gs, b.play_pop())
+    gd = b.on_msg("ghepDung", 520, 220)
+    b.chain(gd, b.play_pop())
+
     return {
         "isStage": True,
         "name": "Stage",
@@ -605,20 +593,20 @@ def build_stage(assets: list[tuple[str, bytes]]) -> dict:
         },
         "broadcasts": {BROADCAST_IDS[k]: BROADCAST_LABELS[k] for k in BROADCAST_LABELS},
         "blocks": b.blocks,
-        "comments": {
-            "n1": {
-                "blockId": f,
-                "x": 420,
-                "y": 20,
-                "width": 180,
-                "height": 80,
-                "minimized": False,
-                "text": "Bien: soCapDaGhep, capDo\nDanh sach cap tu cap 1/2",
-            }
-        },
+        "comments": {},
         "currentCostume": 0,
         "costumes": costumes,
-        "sounds": [],
+        "sounds": [
+            {
+                "assetId": "83a9787d4cb6f3b7632b4ddfebf74367",
+                "name": "pop",
+                "dataFormat": "wav",
+                "format": "",
+                "rate": 48000,
+                "sampleCount": 1123,
+                "md5ext": "83a9787d4cb6f3b7632b4ddfebf74367.wav",
+            }
+        ],
         "volume": 100,
         "layerOrder": 0,
         "tempo": 60,
@@ -699,37 +687,40 @@ def build_project() -> tuple[dict, list[tuple[str, bytes]]]:
 
     project = {
         "targets": targets,
-        "monitors": [
-            {
-                "id": "g_matched",
-                "mode": "default",
-                "opcode": "data_variable",
-                "params": {"VARIABLE": "soCapDaGhep"},
-                "spriteName": None,
-                "value": 0,
-                "width": 0,
-                "height": 0,
-                "x": 5,
-                "y": 5,
-                "visible": True,
-                "sliderMin": 0,
-                "sliderMax": 5,
-                "isDiscrete": True,
-            }
-        ],
+        "monitors": [],
         "extensions": [],
-        "meta": {"semver": "3.0.0", "vm": "11.2.0", "agent": "ghep-noi-v3"},
+        "meta": {
+            "semver": "3.0.0",
+            "vm": "0.2.0-prerelease.20220510130158",
+            "agent": "Scratch 3.29 compatible ghep-noi-v4",
+        },
     }
     return project, assets
 
 
-def main() -> None:
-    project, assets = build_project()
-    with zipfile.ZipFile(OUTPUT, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("project.json", json.dumps(project, ensure_ascii=False, separators=(",", ":")))
+POP_WAV = (
+    "83a9787d4cb6f3b7632b4ddfebf74367.wav",
+    Path("/tmp/empty.sb3"),
+)
+
+
+def write_sb3(project: dict, assets: list[tuple[str, bytes]], output: Path) -> None:
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(
+            "project.json",
+            json.dumps(project, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        )
         for n, d in assets:
             z.writestr(n, d)
-    print(f"OK: {OUTPUT}  sprites={len(project['targets'])}  assets={len(assets)}")
+        if POP_WAV[1].exists():
+            with zipfile.ZipFile(POP_WAV[1]) as tmpl:
+                z.writestr(POP_WAV[0], tmpl.read(POP_WAV[0]))
+
+
+def main() -> None:
+    project, assets = build_project()
+    write_sb3(project, assets, OUTPUT)
+    print(f"OK: {OUTPUT}  sprites={len(project['targets'])}  assets={len(assets)+1}")
 
 
 if __name__ == "__main__":
