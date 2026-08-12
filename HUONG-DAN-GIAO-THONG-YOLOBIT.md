@@ -7,17 +7,19 @@
 1. Mở [https://app.ohstem.vn/](https://app.ohstem.vn/) → **Lập trình Yolo:Bit**
 2. **Mở rộng** → cài **AIOT Kit** + **MQTT** trước (chờ báo cài xong)
 3. **Quản lý chương trình** → **Import project** → file JSON bên dưới
-4. Sau import phải thấy khối **Khi bắt đầu / Lặp lại mãi** trên màn hình. Nếu trống:
+4. Nếu workspace trống, thử import **`giao-thong-import-test.json`** trước (chỉ WiFi/MQTT). Nếu file test hiện khối mà file đầy đủ vẫn trống → báo lại.
+5. Sau import phải thấy khối **Khi bắt đầu / Lặp lại mãi** trên màn hình. Nếu trống:
    - Xóa project vừa import → **Ctrl+F5** tải lại trang
    - Cài lại **AIOT Kit** + **MQTT** → Import lại file mới nhất từ GitHub
-5. Sửa WiFi / username IoT:
+6. Sửa WiFi / username IoT:
    - WiFi: `TenWiFi` / `MatKhauWiFi`
    - Username Bảng IoT: `TenUsernameIoT`
-6. **Chạy** → **Lưu project vào thiết bị**
+7. **Chạy** → **Lưu project vào thiết bị**
 
-Tải trực tiếp từ GitHub (**bắt buộc dùng bản mới — bản cũ trên `main` trước 2026-08-12 bị lỗi trống khối lệnh**):
+Tải trực tiếp từ GitHub:
 
-`https://raw.githubusercontent.com/VuNam1208/Nhung/main/giao-thong-thong-minh.json`
+- Chương trình đầy đủ: `https://raw.githubusercontent.com/VuNam1208/Nhung/main/giao-thong-thong-minh.json`
+- File test import (tối giản): `https://raw.githubusercontent.com/VuNam1208/Nhung/main/giao-thong-import-test.json`
 
 Nếu link trên vẫn trống, thử tải file từ máy tính sau khi `git pull` repo `VuNam1208/Nhung`.
 

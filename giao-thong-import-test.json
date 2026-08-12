@@ -1,0 +1,21 @@
+{
+  "mode": "block",
+  "name": "Giao thong import test",
+  "device": "yolobit",
+  "xmlText": "<xml xmlns=\"https://developers.google.com/blockly/xml\"><variables><variable id=\"vMsg\">thong tin</variable></variables><block type=\"yolobit_basic_forever\" id=\"b25\" x=\"20\" y=\"20\"><statement name=\"ONSTART\"><block type=\"yolobit_basic_clear_display\" id=\"b1\"><next><block type=\"aiot_led_tiny_set_all\" id=\"b2\"><field name=\"port\">pin0</field><field name=\"option\">0</field><value name=\"COLOR\"><shadow type=\"colour_picker\" id=\"b3\"><field name=\"COLOUR\">#000000</field></shadow></value><next><block type=\"aiot_lcd1602_clear\" id=\"b4\"><next><block type=\"aiot_lcd1602_display\" id=\"b5\"><value name=\"string\"><block type=\"text\" id=\"b6\"><field name=\"TEXT\">Import OK</field></block></value><value name=\"X\"><block type=\"math_number\" id=\"b7\"><field name=\"NUM\">0</field></block></value><value name=\"Y\"><block type=\"math_number\" id=\"b8\"><field name=\"NUM\">0</field></block></value><next><block type=\"aiot_lcd1602_display\" id=\"b9\"><value name=\"string\"><block type=\"text\" id=\"b10\"><field name=\"TEXT\">Test minimal</field></block></value><value name=\"X\"><block type=\"math_number\" id=\"b11\"><field name=\"NUM\">0</field></block></value><value name=\"Y\"><block type=\"math_number\" id=\"b12\"><field name=\"NUM\">1</field></block></value><next><block type=\"yolobit_mqtt_connect_wifi\" id=\"b13\"><value name=\"WIFI\"><block type=\"text\" id=\"b14\"><field name=\"TEXT\">TenWiFi</field></block></value><value name=\"PASSWORD\"><block type=\"text\" id=\"b15\"><field name=\"TEXT\">MatKhauWiFi</field></block></value><next><block type=\"yolobit_mqtt_connect_default_servers\" id=\"b16\"><field name=\"SERVER\">mqtt.ohstem.vn</field><value name=\"USERNAME\"><block type=\"text\" id=\"b17\"><field name=\"TEXT\">TenUsernameIoT</field></block></value><value name=\"KEY\"><block type=\"text\" id=\"b18\"><field name=\"TEXT\"></field></block></value><next><block type=\"yolobit_mqtt_publish\" id=\"b20\"><value name=\"MESSAGE\"><block type=\"text\" id=\"b19\"><field name=\"TEXT\">TEST OK</field></block></value><value name=\"TOPIC\"><block type=\"text\" id=\"b21\"><field name=\"TEXT\">V1</field></block></value></block></next></block></next></block></next></block></next></block></next></block></next></block></next></block></statement><statement name=\"FOREVER\"><block type=\"yolobit_mqtt_check_message\" id=\"b22\"><next><block type=\"yolobit_basic_sleep\" id=\"b23\"><value name=\"duration\"><block type=\"math_number\" id=\"b24\"><field name=\"NUM\">100</field></block></value></block></next></block></statement></block></xml>",
+  "python": "# Minimal import test\npass\n",
+  "extensions": [
+    {
+      "id": "yolobit-AITT-VN-yolobit_extension_aiot",
+      "src": "https://github.com/AITT-VN/yolobit_extension_aiot",
+      "name": "AIOT Kit",
+      "description": "Mục mở rộng dành cho bộ kit AIoT"
+    },
+    {
+      "id": "yolobit-AITT-VN-yolobit_extension_mqtt",
+      "src": "https://github.com/AITT-VN/yolobit_extension_mqtt",
+      "name": "MQTT",
+      "description": "Kết nối Bảng điều khiển IoT qua MQTT"
+    }
+  ]
+}
