@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 OUTPUT = Path(__file__).with_name("giao-thong-thong-minh.json")
+OUTPUT_TEST = Path(__file__).with_name("test-sieu-am.json")
 GUIDE = Path(__file__).with_name("HUONG-DAN-GIAO-THONG-YOLOBIT.md")
 BLOCK_GUIDE = Path(__file__).with_name("KHOI-LENH-GIAO-THONG-YOLOBIT.md")
 IOT_GUIDE = Path(__file__).with_name("BANG-IOT-GIAO-THONG.md")
@@ -271,6 +272,22 @@ class Xml:
             ),
         )
 
+    def lcd_line2_distance(self, var_id: str, name: str) -> str:
+        join_id = self.bid()
+        disp_id = self.bid()
+        join = (
+            f'<block type="text_join" id="{join_id}"><mutation items="3"></mutation>'
+            f'<value name="ADD0">{self.text("KC: ")}</value>'
+            f'<value name="ADD1">{self.num_to_text(self.var_get(var_id, name))}</value>'
+            f'<value name="ADD2">{self.text(" cm")}</value></block>'
+        )
+        return (
+            f'<block type="aiot_lcd1602_display" id="{disp_id}">'
+            f'<value name="string">{join}</value>'
+            f'<value name="X">{self.num(0)}</value>'
+            f'<value name="Y">{self.num(1)}</value></block>'
+        )
+
     def math_add(self, a_xml: str, b_xml: str, bid: str | None = None) -> str:
         bid = bid or self.bid()
         return (
@@ -344,6 +361,7 @@ class Xml:
             jam_tick,
             self.var_set(v_dist, dist_name, self.ultrasonic_read_cm()),
             self.mqtt_publish(ch_distance, self.var_get(v_dist, dist_name)),
+            self.lcd_line2_distance(v_dist, dist_name),
             self.sleep_ms(LOOP_MS),
         )
         return self.repeat_times(times_xml, tick)
@@ -497,6 +515,8 @@ def gui_khoang_cach():
   except OSError:
     kc = 999
   mqtt.publish('{CH_DISTANCE}', str(kc))
+  aiot_lcd1602.move_to(0, 1)
+  aiot_lcd1602.putstr('KC: ' + str(kc) + ' cm')
 
 def kiem_tra_ket_xe():
   global dem_ket, dang_ket
@@ -794,6 +814,7 @@ def build_xml() -> str:
                 f'<value name="Y">{x.num(1)}</value></block>'
             ),
         ),
+        x.sleep_ms(2000),
         x.servo_move(SERVO_NORMAL),
         x.sleep_ms(300),
         x.servo_move(SERVO_REVERSE),
@@ -1049,6 +1070,91 @@ def write_project(path: Path, wifi: str, passwd: str, iot_user: str) -> None:
     path.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def build_test_sieu_am_xml() -> str:
+    """Minimal ultrasonic test — no MQTT, only LCD distance."""
+    x = Xml()
+    v_dist = "vDist"
+    forever = x.chain(
+        x.var_set(v_dist, "khoang cach", x.ultrasonic_read_cm()),
+        x.chain(
+            f'<block type="aiot_lcd1602_clear" id="{x.bid()}"></block>',
+            (
+                f'<block type="aiot_lcd1602_display" id="{x.bid()}">'
+                f'<value name="string">{x.text("Khoang cach")}</value>'
+                f'<value name="X">{x.num(0)}</value>'
+                f'<value name="Y">{x.num(0)}</value></block>'
+            ),
+            x.lcd_line2_distance(v_dist, "khoang cach"),
+        ),
+        x.sleep_ms(200),
+    )
+    onstart = x.chain(
+        x.lcd_two_lines("Test sieu am", "P10/P13"),
+        x.ultrasonic_create(),
+        x.sleep_ms(500),
+    )
+    fb = x.bid()
+    return (
+        '<xml xmlns="https://developers.google.com/blockly/xml">'
+        "<variables>"
+        f'<variable id="{v_dist}">khoang cach</variable>'
+        "</variables>"
+        f'<block type="yolobit_basic_forever" id="{fb}" x="20" y="20">'
+        f'<statement name="ONSTART">{onstart}</statement>'
+        f'<statement name="FOREVER">{forever}</statement>'
+        "</block></xml>"
+    )
+
+
+def build_test_sieu_am_python() -> str:
+    return '''from yolobit import *
+import time
+from aiot_lcd1602 import LCD1602
+from aiot_hcsr04 import HCSR04
+
+aiot_lcd1602 = LCD1602()
+aiot_ultrasonic = HCSR04(trigger_pin=pin10.pin, echo_pin=pin13.pin)
+
+khoang_cach = 0
+
+def hien_kc():
+  global khoang_cach
+  try:
+    khoang_cach = int(aiot_ultrasonic.distance_cm())
+  except OSError:
+    khoang_cach = 999
+  aiot_lcd1602.clear()
+  aiot_lcd1602.move_to(0, 0)
+  aiot_lcd1602.putstr('Khoang cach')
+  aiot_lcd1602.move_to(0, 1)
+  aiot_lcd1602.putstr(str(khoang_cach) + ' cm')
+
+if True:
+  aiot_lcd1602.clear()
+  aiot_lcd1602.move_to(0, 0)
+  aiot_lcd1602.putstr('Test sieu am')
+  aiot_lcd1602.move_to(0, 1)
+  aiot_lcd1602.putstr('P10/P13')
+  time.sleep_ms(500)
+
+while True:
+  hien_kc()
+  time.sleep_ms(200)
+'''
+
+
+def write_test_sieu_am(path: Path) -> None:
+    project = {
+        "mode": "block",
+        "name": "Test sieu am",
+        "device": "yolobit",
+        "xmlText": build_test_sieu_am_xml(),
+        "python": build_test_sieu_am_python(),
+        "extensions": [EXTENSIONS[0]],
+    }
+    path.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def validate_xml(xml: str) -> None:
     import re
 
@@ -1103,6 +1209,7 @@ def validate_xml(xml: str) -> None:
 
 def main() -> None:
     write_project(OUTPUT, WIFI_NAME, WIFI_PASS, IOT_USERNAME)
+    write_test_sieu_am(OUTPUT_TEST)
 
     GUIDE.write_text(build_guide(), encoding="utf-8")
     BLOCK_GUIDE.write_text(build_block_guide(), encoding="utf-8")
@@ -1114,6 +1221,7 @@ def main() -> None:
     assert "aiot_ultrasonic_create" in xml
     assert "yolobit_mqtt_check_message" in xml
     print("Created", OUTPUT)
+    print("Created", OUTPUT_TEST)
     print("Created", GUIDE, BLOCK_GUIDE, IOT_GUIDE)
 
 
