@@ -416,11 +416,10 @@ def on_{CH_UNLOCK.lower()}(thong_tin):
 
 def on_{CH_RESET.lower()}(thong_tin):
   global dang_reset_mk, mk_moi
-  if str(thong_tin) in ('1', 'RESET', 'reset'):
-    dang_reset_mk = 1
-    mk_moi = ''
-    mqtt.publish('{CH_STATUS}', '')
-    hien_lcd('Nhap MK moi')
+  dang_reset_mk = 1
+  mk_moi = ''
+  mqtt.publish('{CH_STATUS}', '')
+  hien_lcd('Nhap MK moi')
 
 def on_{CH_CHAR1.lower()}(thong_tin):
   global mk_moi, dang_reset_mk
@@ -436,7 +435,7 @@ def on_{CH_CHAR2.lower()}(thong_tin):
 
 def on_{CH_SAVE.lower()}(thong_tin):
   global dang_reset_mk
-  if dang_reset_mk and str(thong_tin) in ('1', 'LUU', 'luu'):
+  if dang_reset_mk:
     luu_mk_moi()
 
 if True:
@@ -570,14 +569,11 @@ def build_xml() -> str:
             CH_RESET,
             v_msg,
             "thong tin",
-            x.stmt_if(
-                x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("1")),
-                x.chain(
-                    x.var_set(v_reset, "dang reset mk", x.num(1)),
-                    x.var_set(v_new, "mk moi", x.text("")),
-                    x.mqtt_publish(CH_STATUS, x.text("")),
-                    x.lcd_show(x.text("Nhap MK moi")),
-                ),
+            x.chain(
+                x.var_set(v_reset, "dang reset mk", x.num(1)),
+                x.var_set(v_new, "mk moi", x.text("")),
+                x.mqtt_publish(CH_STATUS, x.text("")),
+                x.lcd_show(x.text("Nhap MK moi")),
             ),
         ),
         x.mqtt_on_receive(
@@ -621,10 +617,7 @@ def build_xml() -> str:
             v_msg,
             "thong tin",
             x.stmt_if(
-                x.logic_and(
-                    x.compare_eq(x.var_get(v_reset, "dang reset mk"), x.num(1)),
-                    x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("1")),
-                ),
+                x.compare_eq(x.var_get(v_reset, "dang reset mk"), x.num(1)),
                 x.chain(
                     x.var_set(v_mk, "mat khau cai dat", x.var_get(v_new, "mk moi")),
                     x.var_set(v_new, "mk moi", x.text("")),
