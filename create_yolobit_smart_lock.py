@@ -124,11 +124,46 @@ class Xml:
             return ""
         if len(blocks) == 1:
             return blocks[0]
-        result = blocks[0]
+        out = blocks[0]
         for nxt in blocks[1:]:
-            idx = result.rfind("</block>")
-            result = result[:idx] + f"<next>{nxt}</next>" + result[idx:]
-        return result
+            close_idx = self._chain_tail_close_index(out)
+            out = out[:close_idx] + f"<next>{nxt}</next>" + out[close_idx:]
+        return out
+
+    @staticmethod
+    def _top_level_close_index(xml: str) -> int:
+        depth = 0
+        i = 0
+        while i < len(xml):
+            if xml.startswith("<block", i):
+                depth += 1
+                i += 6
+                continue
+            if xml.startswith("</block>", i):
+                depth -= 1
+                if depth == 0:
+                    return i
+                i += 8
+                continue
+            i += 1
+        return xml.rfind("</block>")
+
+    @staticmethod
+    def _chain_tail_close_index(xml: str) -> int:
+        """Return index of </block> for the last block in a linear next-chain."""
+        close_idx = Xml._top_level_close_index(xml)
+        inner = xml[:close_idx]
+        next_pos = inner.rfind("<next>")
+        if next_pos == -1:
+            return close_idx
+
+        after_next = xml[next_pos + 6 : close_idx].lstrip()
+        if not after_next.startswith("<block"):
+            return close_idx
+
+        lead = len(xml[next_pos + 6 : close_idx]) - len(after_next)
+        sub_tail = Xml._chain_tail_close_index(after_next)
+        return next_pos + 6 + lead + sub_tail
 
     def stmt_if(self, cond: str, do: str, else_do: str | None = None, bid: str | None = None) -> str:
         bid = bid or self.bid()
@@ -199,6 +234,8 @@ class Xml:
             name,
             self.math_add(self.var_get(var_id, name), self.num(1)),
         )
+
+    def append_char(self, var_id: str, var_name: str, ch: str) -> str:
         join_id = self.bid()
         return self.var_set(
             var_id,

@@ -12,26 +12,9 @@
    - Username Bảng IoT: `SmartKey123`
 7. Kết nối Yolo:Bit → **Chạy** → **Lưu project vào thiết bị**
 
-### Tải file (chọn 1 cách)
+Tải trực tiếp từ GitHub (nhánh `cursor/yolobit-smart-lock-6e7f`):
 
-**Cách 1 — Link trực tiếp (khuyên dùng):**
-
-https://raw.githubusercontent.com/VuNam1208/Nhung/main/o-khoa-yolo-bit.json
-
-- Mở link → trình duyệt hiện nội dung JSON
-- Nhấn **Ctrl+S** (hoặc ⋮ → Lưu trang thành…)
-- Đặt tên: `o-khoa-yolo-bit.json` (phải có đuôi `.json`)
-- **Không** lưu thành `.html` hoặc `.txt`
-
-**Cách 2 — GitHub:**
-
-https://github.com/VuNam1208/Nhung/blob/main/o-khoa-yolo-bit.json
-
-- Vào trang → nút **Raw** (góc phải) → Ctrl+S
-
-**Cách 3 — Nếu vẫn lỗi:**
-
-Mở OhStem → Import project → kéo thả file `o-khoa-yolo-bit.json` từ máy (nhờ bạn bè tải hộ qua link Cách 1 rồi gửi file).
+`https://github.com/VuNam1208/Nhung/raw/cursor/yolobit-smart-lock-6e7f/o-khoa-yolo-bit.json`
 
 ## Kết nối phần cứng
 
