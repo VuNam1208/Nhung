@@ -2,15 +2,16 @@
 
 ## Tải chương trình
 
-1. Mở [https://app.ohstem.vn/](https://app.ohstem.vn/)
-2. Chọn **Lập trình Yolo:Bit**
-3. **Quản lý chương trình** → **Import project**
-4. Chọn file **`giao-thong-thong-minh.json`**
-5. Cài extension **AIOT Kit** và **MQTT**
-6. Sửa WiFi / username IoT:
+**Quan trọng — làm đúng thứ tự:**
+
+1. Mở [https://app.ohstem.vn/](https://app.ohstem.vn/) → **Lập trình Yolo:Bit**
+2. **Mở rộng** → cài **AIOT Kit** + **MQTT** trước (chờ báo cài xong)
+3. **Quản lý chương trình** → **Import project** → file JSON bên dưới
+4. Nếu màn hình trống: **Ctrl+F5** tải lại trang → Import lại
+5. Sửa WiFi / username IoT:
    - WiFi: `Haha` / `0383075064`
    - Username Bảng IoT: `SmartTraffic123`
-7. Kết nối Yolo:Bit → **Chạy** → **Lưu project vào thiết bị**
+6. **Chạy** → **Lưu project vào thiết bị**
 
 Tải trực tiếp từ GitHub (nhánh `main`):
 
