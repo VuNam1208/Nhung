@@ -1,0 +1,12 @@
+{
+  "name": "Nhung - IoT/embedded teaching bundle",
+  "install": "python3 --version && command -v curl unzip",
+  "start": "bash .cursor/fetch-sunfounder-template.sh",
+  "terminals": [
+    {
+      "name": "esp-dashboard",
+      "command": "python3 -m http.server 8000"
+    }
+  ],
+  "ports": [8000]
+}
