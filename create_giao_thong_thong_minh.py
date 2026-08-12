@@ -196,11 +196,12 @@ class Xml:
             f'<statement name="DO0">{do}</statement>{else_part}</block>'
         )
 
-    def sleep_ms(self, ms: int, bid: str | None = None) -> str:
+    def sleep_ms(self, ms: int | str, bid: str | None = None) -> str:
         bid = bid or self.bid()
+        duration = self.num(ms) if isinstance(ms, int) else ms
         return (
             f'<block type="yolobit_basic_sleep" id="{bid}">'
-            f'<value name="duration">{self.num(ms)}</value></block>'
+            f'<value name="duration">{duration}</value></block>'
         )
 
     def rgb2(self, colour: str, bid: str | None = None) -> str:
@@ -282,6 +283,13 @@ class Xml:
             var_id,
             name,
             self.math_add(self.var_get(var_id, name), self.num(1)),
+        )
+
+    def add_to_var(self, var_id: str, name: str, amount: int) -> str:
+        return self.var_set(
+            var_id,
+            name,
+            self.math_add(self.var_get(var_id, name), self.num(amount)),
         )
 
     def servo_angle(self, angle: int) -> str:
@@ -566,9 +574,16 @@ def build_xml() -> str:
         x.lcd_two_lines("Huong 1: DO", "Huong 2: VANG"),
     )
 
+    green1_ms = x.math_add(x.num(GREEN_MS), x.var_get(v_bonus1, "them xanh 1"))
+    green2_ms = x.math_add(x.num(GREEN_MS), x.var_get(v_bonus2, "them xanh 2"))
     phase0 = x.stmt_if(
         x.compare_eq(x.var_get(v_step, "buoc den"), x.num(0)),
-        x.chain(lights_g1_r2, x.sleep_ms(GREEN_MS), x.var_set(v_step, "buoc den", x.num(1))),
+        x.chain(
+            lights_g1_r2,
+            x.sleep_ms(green1_ms),
+            x.var_set(v_bonus1, "them xanh 1", x.num(0)),
+            x.var_set(v_step, "buoc den", x.num(1)),
+        ),
     )
     phase1 = x.stmt_if(
         x.compare_eq(x.var_get(v_step, "buoc den"), x.num(1)),
@@ -576,7 +591,12 @@ def build_xml() -> str:
     )
     phase2 = x.stmt_if(
         x.compare_eq(x.var_get(v_step, "buoc den"), x.num(2)),
-        x.chain(lights_r1_g2, x.sleep_ms(GREEN_MS), x.var_set(v_step, "buoc den", x.num(3))),
+        x.chain(
+            lights_r1_g2,
+            x.sleep_ms(green2_ms),
+            x.var_set(v_bonus2, "them xanh 2", x.num(0)),
+            x.var_set(v_step, "buoc den", x.num(3)),
+        ),
     )
     phase3 = x.stmt_if(
         x.compare_eq(x.var_get(v_step, "buoc den"), x.num(3)),
@@ -617,7 +637,7 @@ def build_xml() -> str:
             "thong tin",
             x.stmt_if(
                 x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("1")),
-                x.increment_var(v_bonus1, "them xanh 1"),
+                x.add_to_var(v_bonus1, "them xanh 1", IOT_GREEN_BONUS_MS),
             ),
         ),
         x.mqtt_on_receive(
@@ -626,7 +646,7 @@ def build_xml() -> str:
             "thong tin",
             x.stmt_if(
                 x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("1")),
-                x.increment_var(v_bonus2, "them xanh 2"),
+                x.add_to_var(v_bonus2, "them xanh 2", IOT_GREEN_BONUS_MS),
             ),
         ),
         x.mqtt_on_receive(
