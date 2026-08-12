@@ -70,20 +70,13 @@ class Xml:
     def field_var(self, var_id: str, name: str) -> str:
         return f'<field name="VAR" id="{var_id}">{name}</field>'
 
-    def text(self, value: str, bid: str | None = None, shadow: bool = True) -> str:
+    def text(self, value: str, bid: str | None = None) -> str:
         bid = bid or self.bid()
         esc = value.replace("&", "&amp;").replace("<", "&lt;")
-        if shadow:
-            return f'<shadow type="text" id="{bid}"><field name="TEXT">{esc}</field></shadow>'
         return f'<block type="text" id="{bid}"><field name="TEXT">{esc}</field></block>'
 
-    def num(self, value: int | str, bid: str | None = None, shadow: bool = True) -> str:
+    def num(self, value: int | str, bid: str | None = None) -> str:
         bid = bid or self.bid()
-        if shadow:
-            return (
-                f'<shadow type="math_number" id="{bid}">'
-                f'<field name="NUM">{value}</field></shadow>'
-            )
         return (
             f'<block type="math_number" id="{bid}">'
             f'<field name="NUM">{value}</field></block>'
@@ -202,7 +195,7 @@ class Xml:
         bid = bid or self.bid()
         return (
             f'<block type="yolobit_basic_sleep" id="{bid}">'
-            f'<value name="duration">{self.num(ms, shadow=True)}</value></block>'
+            f'<value name="duration">{self.num(ms)}</value></block>'
         )
 
     def rgb2(self, colour: str, bid: str | None = None) -> str:
@@ -232,7 +225,7 @@ class Xml:
         join_id = self.bid()
         return (
             f'<block type="text_join" id="{join_id}"><mutation items="2"></mutation>'
-            f'<value name="ADD0">{self.text("", shadow=True)}</value>'
+            f'<value name="ADD0">{self.text("")}</value>'
             f'<value name="ADD1">{num_xml}</value></block>'
         )
 
@@ -297,7 +290,7 @@ class Xml:
         b = self.bid()
         return (
             f'<block type="aiot_ultrasonic_checkdistance" id="{b}"><field name="TYPE">CM</field>'
-            f'<value name="DISTANCE">{self.num(cm, shadow=True)}</value></block>'
+            f'<value name="DISTANCE">{self.num(cm)}</value></block>'
         )
 
     def ultrasonic_read_cm(self) -> str:
@@ -560,20 +553,20 @@ def build_xml() -> str:
     )
 
     phase0 = x.stmt_if(
-        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(0, shadow=False)),
-        x.chain(lights_g1_r2, x.sleep_ms(GREEN_MS), x.var_set(v_step, "buoc den", x.num(1, shadow=False))),
+        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(0)),
+        x.chain(lights_g1_r2, x.sleep_ms(GREEN_MS), x.var_set(v_step, "buoc den", x.num(1))),
     )
     phase1 = x.stmt_if(
-        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(1, shadow=False)),
-        x.chain(lights_y1_r2, x.sleep_ms(YELLOW_MS), x.var_set(v_step, "buoc den", x.num(2, shadow=False))),
+        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(1)),
+        x.chain(lights_y1_r2, x.sleep_ms(YELLOW_MS), x.var_set(v_step, "buoc den", x.num(2))),
     )
     phase2 = x.stmt_if(
-        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(2, shadow=False)),
-        x.chain(lights_r1_g2, x.sleep_ms(GREEN_MS), x.var_set(v_step, "buoc den", x.num(3, shadow=False))),
+        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(2)),
+        x.chain(lights_r1_g2, x.sleep_ms(GREEN_MS), x.var_set(v_step, "buoc den", x.num(3))),
     )
     phase3 = x.stmt_if(
-        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(3, shadow=False)),
-        x.chain(lights_r1_y2, x.sleep_ms(YELLOW_MS), x.var_set(v_step, "buoc den", x.num(0, shadow=False))),
+        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(3)),
+        x.chain(lights_r1_y2, x.sleep_ms(YELLOW_MS), x.var_set(v_step, "buoc den", x.num(0))),
     )
 
     jam_detect = x.stmt_if(
@@ -584,23 +577,23 @@ def build_xml() -> str:
                 x.logic_and(
                     x.compare_gte(
                         x.var_get(v_jam_cnt, "dem ket xe"),
-                        x.num(jam_ticks, shadow=False),
+                        x.num(jam_ticks),
                     ),
                     x.logic_not(
                         x.compare_eq(
                             x.var_get(v_jam, "dang ket xe"),
-                            x.num(1, shadow=False),
+                            x.num(1),
                         )
                     ),
                 ),
                 x.chain(
-                    x.var_set(v_jam, "dang ket xe", x.num(1, shadow=False)),
+                    x.var_set(v_jam, "dang ket xe", x.num(1)),
                     x.mqtt_publish(CH_STATUS, x.text("KET XE!")),
                     x.lcd_two_lines("CANH BAO KET XE", "Dung tren IoT"),
                 ),
             ),
         ),
-        x.var_set(v_jam_cnt, "dem ket xe", x.num(0, shadow=False)),
+        x.var_set(v_jam_cnt, "dem ket xe", x.num(0)),
     )
 
     mqtt_callbacks = x.chain(
@@ -644,15 +637,13 @@ def build_xml() -> str:
             CH_LANE_REV,
             v_msg,
             "thong tin",
-            x.chain(
-                x.stmt_if(
-                    x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("1")),
-                    x.chain(
-                        x.servo_angle(SERVO_REVERSE),
-                        x.lcd_two_lines("Dao lan ON", "Tang luu thong"),
-                    ),
+            x.stmt_if(
+                x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("1")),
+                x.chain(
+                    x.servo_angle(SERVO_REVERSE),
+                    x.lcd_two_lines("Dao lan ON", "Tang luu thong"),
                 ),
-                x.stmt_if(
+                else_do=x.stmt_if(
                     x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("0")),
                     x.chain(
                         x.servo_angle(SERVO_NORMAL),
@@ -675,11 +666,11 @@ def build_xml() -> str:
     )
 
     onstart = x.chain(
-        x.var_set(v_step, "buoc den", x.num(0, shadow=False)),
-        x.var_set(v_jam_cnt, "dem ket xe", x.num(0, shadow=False)),
-        x.var_set(v_jam, "dang ket xe", x.num(0, shadow=False)),
-        x.var_set(v_bonus1, "them xanh 1", x.num(0, shadow=False)),
-        x.var_set(v_bonus2, "them xanh 2", x.num(0, shadow=False)),
+        x.var_set(v_step, "buoc den", x.num(0)),
+        x.var_set(v_jam_cnt, "dem ket xe", x.num(0)),
+        x.var_set(v_jam, "dang ket xe", x.num(0)),
+        x.var_set(v_bonus1, "them xanh 1", x.num(0)),
+        x.var_set(v_bonus2, "them xanh 2", x.num(0)),
         x.display_clear(),
         x.rgb2("#000000"),
         x.servo_angle(SERVO_NORMAL),
@@ -719,7 +710,9 @@ def build_guide() -> str:
 1. Mở [https://app.ohstem.vn/](https://app.ohstem.vn/) → **Lập trình Yolo:Bit**
 2. **Mở rộng** → cài **AIOT Kit** + **MQTT** trước (chờ báo cài xong)
 3. **Quản lý chương trình** → **Import project** → file JSON bên dưới
-4. Nếu màn hình trống: **Ctrl+F5** tải lại trang → Import lại
+4. Sau import phải thấy khối **Khi bắt đầu / Lặp lại mãi** trên màn hình. Nếu trống:
+   - Xóa project vừa import → **Ctrl+F5** tải lại trang
+   - Cài lại **AIOT Kit** + **MQTT** → Import lại file mới nhất từ GitHub
 5. Sửa WiFi / username IoT:
    - WiFi: `{WIFI_NAME}` / `{WIFI_PASS}`
    - Username Bảng IoT: `{IOT_USERNAME}`
@@ -946,6 +939,35 @@ def validate_xml(xml: str) -> None:
     missing = required - found
     if missing:
         raise SystemExit(f"XML missing required block types: {missing}")
+
+    # OhStem import expects real blocks (not only shadows) for text/number values.
+    if 'block type="text"' not in xml:
+        raise SystemExit("XML has no text blocks — OhStem may show an empty workspace")
+    if xml.count("<shadow type=\"text\"") > xml.count('block type="text"'):
+        raise SystemExit("XML uses too many text shadows — prefer block type=\"text\"")
+
+    def statement_roots(section: str) -> int:
+        depth = 0
+        tops = 0
+        for i in range(len(section)):
+            if section.startswith("<block", i):
+                if depth == 0:
+                    tops += 1
+                depth += 1
+            elif section.startswith("</block>", i):
+                depth -= 1
+        return tops
+
+    onstart = re.search(
+        r'<statement name="ONSTART">(.*)</statement>\s*<statement name="FOREVER">',
+        xml,
+        re.DOTALL,
+    )
+    forever = re.search(r'<statement name="FOREVER">(.*)</statement>\s*</block>\s*</xml>', xml, re.DOTALL)
+    if onstart and statement_roots(onstart.group(1)) != 1:
+        raise SystemExit("ONSTART must contain exactly one root block chain")
+    if forever and statement_roots(forever.group(1)) != 1:
+        raise SystemExit("FOREVER must contain exactly one root block chain")
 
 
 def main() -> None:

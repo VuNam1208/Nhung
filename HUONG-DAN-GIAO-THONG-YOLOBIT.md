@@ -7,7 +7,9 @@
 1. Mở [https://app.ohstem.vn/](https://app.ohstem.vn/) → **Lập trình Yolo:Bit**
 2. **Mở rộng** → cài **AIOT Kit** + **MQTT** trước (chờ báo cài xong)
 3. **Quản lý chương trình** → **Import project** → file JSON bên dưới
-4. Nếu màn hình trống: **Ctrl+F5** tải lại trang → Import lại
+4. Sau import phải thấy khối **Khi bắt đầu / Lặp lại mãi** trên màn hình. Nếu trống:
+   - Xóa project vừa import → **Ctrl+F5** tải lại trang
+   - Cài lại **AIOT Kit** + **MQTT** → Import lại file mới nhất từ GitHub
 5. Sửa WiFi / username IoT:
    - WiFi: `TenWiFi` / `MatKhauWiFi`
    - Username Bảng IoT: `TenUsernameIoT`
