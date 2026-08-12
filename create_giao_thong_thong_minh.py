@@ -7,15 +7,14 @@ import json
 from pathlib import Path
 
 OUTPUT = Path(__file__).with_name("giao-thong-thong-minh.json")
-OUTPUT_USER = Path(__file__).with_name("Giao-thong-YoloBit-da-sua.json")
 GUIDE = Path(__file__).with_name("HUONG-DAN-GIAO-THONG-YOLOBIT.md")
 BLOCK_GUIDE = Path(__file__).with_name("KHOI-LENH-GIAO-THONG-YOLOBIT.md")
 IOT_GUIDE = Path(__file__).with_name("BANG-IOT-GIAO-THONG.md")
 
-# --- User configuration (edit before flashing) ---
+# --- Sửa 3 dòng này trên OhStem App sau khi import (không ghi sẵn WiFi/username) ---
 WIFI_NAME = "TenWiFi"
 WIFI_PASS = "MatKhauWiFi"
-IOT_USERNAME = "SmartTraffic123"
+IOT_USERNAME = "TenUsernameIoT"
 
 # Phase timing (milliseconds) — tham số tự chọn (ghi rõ trong bài)
 GREEN_MS = 5000
@@ -951,7 +950,6 @@ def validate_xml(xml: str) -> None:
 
 def main() -> None:
     write_project(OUTPUT, WIFI_NAME, WIFI_PASS, IOT_USERNAME)
-    write_project(OUTPUT_USER, "Haha", "0383075064", "SmartTraffic123")
 
     GUIDE.write_text(build_guide(), encoding="utf-8")
     BLOCK_GUIDE.write_text(build_block_guide(), encoding="utf-8")
@@ -963,7 +961,6 @@ def main() -> None:
     assert "aiot_ultrasonic_create" in xml
     assert "yolobit_mqtt_check_message" in xml
     print("Created", OUTPUT)
-    print("Created", OUTPUT_USER)
     print("Created", GUIDE, BLOCK_GUIDE, IOT_GUIDE)
 
 

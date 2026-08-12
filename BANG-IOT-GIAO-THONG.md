@@ -5,7 +5,7 @@
 | Mục | Giá trị |
 |-----|---------|
 | Tên bảng | **SMART TRAFFIC** |
-| Username | `SmartTraffic123` |
+| Username | `TenUsernameIoT` |
 | Server | `mqtt.ohstem.vn` |
 
 ## Widget đề xuất
@@ -27,7 +27,7 @@ Mỗi **nút bấm**: **Giá trị gửi khi nhấn** = `1` (riêng nút TẮT �
 
 ## Liên kết code
 
-Username trong khối **kết nối server OhStem** phải trùng **`SmartTraffic123`**.
+Username trong khối **kết nối server OhStem** phải trùng **`TenUsernameIoT`**.
 
 ## Kiểm thử
 

@@ -24,7 +24,7 @@ RGB P0 tắt (#000000)
 Servo P6 → 20°
 LCD: "Giao thong OK" / "San sang"
 Khởi tạo siêu âm P10/P13
-Kết nối WiFi + MQTT username "SmartTraffic123"
+Kết nối WiFi + MQTT username "TenUsernameIoT"
 Gửi "BINH THUONG" → V1
 [Đăng ký nhận V2..V6]
 ```

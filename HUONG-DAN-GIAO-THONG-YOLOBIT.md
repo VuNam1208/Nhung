@@ -9,8 +9,8 @@
 3. **Quản lý chương trình** → **Import project** → file JSON bên dưới
 4. Nếu màn hình trống: **Ctrl+F5** tải lại trang → Import lại
 5. Sửa WiFi / username IoT:
-   - WiFi: `Haha` / `0383075064`
-   - Username Bảng IoT: `SmartTraffic123`
+   - WiFi: `TenWiFi` / `MatKhauWiFi`
+   - Username Bảng IoT: `TenUsernameIoT`
 6. **Chạy** → **Lưu project vào thiết bị**
 
 Tải trực tiếp từ GitHub (nhánh `main`):
