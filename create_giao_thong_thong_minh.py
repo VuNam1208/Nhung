@@ -56,6 +56,11 @@ CH_LCD_LANE = "V5"
 CH_LANE_REV = "V6"
 CH_DISTANCE = "V7"
 
+# Matrix colours — direction 1 (Yolo:Bit 5×5)
+MATRIX_GREEN = "#00ff00"
+MATRIX_YELLOW = "#ffff00"
+MATRIX_RED = "#ff0000"
+
 
 class Xml:
     """Minimal Blockly XML builder for OhStem export."""
@@ -208,15 +213,22 @@ class Xml:
             f'<field name="COLOUR">{colour}</field></shadow></value></block>'
         )
 
-    def den1_led(self, colour: str, bid: str | None = None) -> str:
-        """Direction 1: Yolo:Bit 5x5 matrix via LED category blocks."""
-        bid = bid or self.bid()
-        sh = self.bid()
-        return (
-            f'<block type="yolobit_led_set_all" id="{bid}">'
-            f'<value name="COLOR"><shadow type="colour_picker" id="{sh}">'
-            f'<field name="COLOUR">{colour}</field></shadow></value></block>'
+    def den1_matrix(self, colour: str) -> str:
+        """Direction 1: native OhStem matrix blocks (show_image + create_image)."""
+        img_id = self.bid()
+        fields = "".join(
+            f'<field name="{y}{x}">{colour}</field>' for y in range(5) for x in range(5)
         )
+        create = f'<block type="yolobit_basic_create_image" id="{img_id}">{fields}</block>'
+        show_id = self.bid()
+        return (
+            f'<block type="yolobit_basic_show_image" id="{show_id}">'
+            f'<value name="image">{create}</value></block>'
+        )
+
+    def den1_led(self, colour: str, bid: str | None = None) -> str:
+        """Alias — use OhStem-native matrix blocks instead of yolobit_led_set_all."""
+        return self.den1_matrix(colour)
 
     def display_clear(self) -> str:
         return f'<block type="yolobit_basic_clear_display" id="{self.bid()}"></block>'
@@ -289,8 +301,9 @@ class Xml:
     def ultrasonic_near(self, cm: int) -> str:
         b = self.bid()
         return (
-            f'<block type="aiot_ultrasonic_checkdistance" id="{b}"><field name="TYPE">CM</field>'
-            f'<value name="DISTANCE">{self.num(cm)}</value></block>'
+            f'<block type="aiot_ultrasonic_checkdistance" id="{b}">'
+            f'<value name="DISTANCE">{self.num(cm)}</value>'
+            f'<field name="TYPE">CM</field></block>'
         )
 
     def ultrasonic_read_cm(self) -> str:
@@ -528,26 +541,27 @@ def build_xml() -> str:
     v_bonus1 = "vBonus1"
     v_bonus2 = "vBonus2"
     v_msg = "vMsg"
+    v_dist = "vDist"
 
     jam_ticks = JAM_HOLD_MS // LOOP_MS
 
     lights_g1_r2 = x.chain(
-        x.den1_led("#00ff00"),
+        x.den1_matrix(MATRIX_GREEN),
         x.rgb2("#ff0000"),
         x.lcd_two_lines("Huong 1: XANH", "Huong 2: DO"),
     )
     lights_y1_r2 = x.chain(
-        x.den1_led("#ffff00"),
+        x.den1_matrix(MATRIX_YELLOW),
         x.rgb2("#ff0000"),
         x.lcd_two_lines("Huong 1: VANG", "Huong 2: DO"),
     )
     lights_r1_g2 = x.chain(
-        x.den1_led("#ff0000"),
+        x.den1_matrix(MATRIX_RED),
         x.rgb2("#00ff00"),
         x.lcd_two_lines("Huong 1: DO", "Huong 2: XANH"),
     )
     lights_r1_y2 = x.chain(
-        x.den1_led("#ff0000"),
+        x.den1_matrix(MATRIX_RED),
         x.rgb2("#ffff00"),
         x.lcd_two_lines("Huong 1: DO", "Huong 2: VANG"),
     )
@@ -657,7 +671,8 @@ def build_xml() -> str:
     forever = x.chain(
         x.mqtt_check(),
         jam_detect,
-        x.mqtt_publish(CH_DISTANCE, x.num_to_text(x.ultrasonic_read_cm())),
+        x.var_set(v_dist, "khoang cach", x.ultrasonic_read_cm()),
+        x.mqtt_publish(CH_DISTANCE, x.var_get(v_dist, "khoang cach")),
         phase0,
         phase1,
         phase2,
@@ -692,6 +707,7 @@ def build_xml() -> str:
         f'<variable id="{v_bonus1}">them xanh 1</variable>'
         f'<variable id="{v_bonus2}">them xanh 2</variable>'
         f'<variable id="{v_msg}">thong tin</variable>'
+        f'<variable id="{v_dist}">khoang cach</variable>'
         "</variables>"
         f'<block type="yolobit_basic_forever" id="{fb}" x="20" y="20">'
         f'<statement name="ONSTART">{onstart}</statement>'
@@ -718,9 +734,11 @@ def build_guide() -> str:
    - Username Bảng IoT: `{IOT_USERNAME}`
 6. **Chạy** → **Lưu project vào thiết bị**
 
-Tải trực tiếp từ GitHub (nhánh `main`):
+Tải trực tiếp từ GitHub (**bắt buộc dùng bản mới — bản cũ trên `main` trước 2026-08-12 bị lỗi trống khối lệnh**):
 
 `https://raw.githubusercontent.com/VuNam1208/Nhung/main/giao-thong-thong-minh.json`
+
+Nếu link trên vẫn trống, thử tải file từ máy tính sau khi `git pull` repo `VuNam1208/Nhung`.
 
 ## Kết nối phần cứng
 
@@ -927,12 +945,14 @@ def validate_xml(xml: str) -> None:
     found = set(re.findall(r'type="([^"]+)"', xml))
     required = {
         "yolobit_basic_forever",
-        "yolobit_led_set_all",
+        "yolobit_basic_show_image",
+        "yolobit_basic_create_image",
         "yolobit_basic_clear_display",
         "yolobit_mqtt_check_message",
         "yolobit_basic_sleep",
+        "aiot_ultrasonic_create",
     }
-    bad = {"yolobit_display_show_image", "yolobit_display_clear", "yolobit_basic_create_image"}
+    bad = {"yolobit_display_show_image", "yolobit_display_clear", "yolobit_led_set_all"}
     invalid = found & bad
     if invalid:
         raise SystemExit(f"XML uses invalid block types: {invalid}")

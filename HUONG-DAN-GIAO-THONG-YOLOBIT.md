@@ -15,9 +15,11 @@
    - Username Bảng IoT: `TenUsernameIoT`
 6. **Chạy** → **Lưu project vào thiết bị**
 
-Tải trực tiếp từ GitHub (nhánh `main`):
+Tải trực tiếp từ GitHub (**bắt buộc dùng bản mới — bản cũ trên `main` trước 2026-08-12 bị lỗi trống khối lệnh**):
 
 `https://raw.githubusercontent.com/VuNam1208/Nhung/main/giao-thong-thong-minh.json`
+
+Nếu link trên vẫn trống, thử tải file từ máy tính sau khi `git pull` repo `VuNam1208/Nhung`.
 
 ## Kết nối phần cứng
 
