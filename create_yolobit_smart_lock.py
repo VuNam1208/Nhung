@@ -479,15 +479,15 @@ if True:
 while True:
   mqtt.check_message()
   if not khoa_vat_ly:
-    if button_a.is_pressed_ab():
+    if button_a.is_pressed() and button_b.is_pressed():
       kiem_tra_mk()
       time.sleep_ms(400)
-    elif button_a.is_pressed():
+    elif button_a.is_pressed() and not button_b.is_pressed():
       music.play(['G3:1'], wait=True)
       mat_khau_nhap = str(mat_khau_nhap) + '1'
       hien_lcd(mat_khau_nhap)
       time.sleep_ms(250)
-    elif button_b.is_pressed():
+    elif button_b.is_pressed() and not button_a.is_pressed():
       music.play(['G3:1'], wait=True)
       mat_khau_nhap = str(mat_khau_nhap) + '2'
       hien_lcd(mat_khau_nhap)
@@ -555,17 +555,21 @@ def build_xml() -> str:
 
     not_locked = x.logic_not(x.compare_eq(x.var_get(v_lock, "khoa vat ly"), x.num(1)))
 
+    both_buttons = x.logic_and(x.btn_pressed("a"), x.btn_pressed("b"))
+    only_a = x.logic_and(x.btn_pressed("a"), x.logic_not(x.btn_pressed("b")))
+    only_b = x.logic_and(x.btn_pressed("b"), x.logic_not(x.btn_pressed("a")))
+
     forever = x.chain(
         x.mqtt_check(),
         x.stmt_if(
             not_locked,
             x.stmt_if(
-                x.btn_pressed("a+b"),
+                both_buttons,
                 check_pw,
                 x.stmt_if(
-                    x.btn_pressed("a"),
+                    only_a,
                     press_a,
-                    x.stmt_if(x.btn_pressed("b"), press_b),
+                    x.stmt_if(only_b, press_b),
                 ),
             ),
         ),
