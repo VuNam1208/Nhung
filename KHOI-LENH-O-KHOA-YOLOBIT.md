@@ -221,4 +221,6 @@ nếu không thì
 1. OhStem → **Import project** → chọn `o-khoa-yolo-bit.json`
 2. Sửa WiFi / username → **Chạy** → **Lưu vào thiết bị**
 
-Tải file: https://github.com/VuNam1208/Nhung/raw/cursor/yolobit-smart-lock-6e7f/o-khoa-yolo-bit.json
+Tải file: https://raw.githubusercontent.com/VuNam1208/Nhung/main/o-khoa-yolo-bit.json
+
+(Mở link → **Ctrl+S** → lưu thành `o-khoa-yolo-bit.json`)
