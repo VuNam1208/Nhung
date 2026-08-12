@@ -39,8 +39,8 @@ Nếu link trên vẫn trống, thử tải file từ máy tính sau khi `git pu
 | Thời gian đèn vàng | `2000` ms | Mỗi lượt vàng |
 | Ngưỡng kẹt xe | `15` cm | Siêu âm nhỏ hơn = có xe |
 | Thời gian xác nhận kẹt | `5000` ms | Giữ ngưỡng bao lâu |
-| Servo bình thường | `20`° | Làn mặc định |
-| Servo đảo chiều | `110`° | Mở thêm làn |
+| Servo bình thường | `0`° | Làn mặc định |
+| Servo đảo chiều | `90`° | Mở thêm làn |
 
 ## Chế độ bình thường
 

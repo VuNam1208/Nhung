@@ -18,8 +18,8 @@
 | Nút | Xanh lâu H2 | **V3** | Gửi `1` → thêm xanh hướng 2 |
 | Nút | Hướng vòng tránh | **V4** | Gửi `1` → LCD đường tránh |
 | Nút | Mở làn chung | **V5** | Gửi `1` → LCD xe máy được đi |
-| Nút | Đảo làn BẬT | **V6** | Gửi `1` → servo góc 110° |
-| Nút | Đảo làn TẮT | **V6** | Gửi `0` → servo góc 20° |
+| Nút | Đảo làn BẬT | **V6** | Gửi `1` → servo góc 90° |
+| Nút | Đảo làn TẮT | **V6** | Gửi `0` → servo góc 0° |
 
 ## Cấu hình nút
 

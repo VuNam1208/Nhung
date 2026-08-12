@@ -25,9 +25,9 @@ JAM_DISTANCE_CM = 15
 JAM_HOLD_MS = 5000
 LOOP_MS = 100
 
-# Servo lane barrier — P6
-SERVO_NORMAL = 20
-SERVO_REVERSE = 110
+# Servo lane barrier — P6 (0° / 90° giống khóa thông minh OhStem)
+SERVO_NORMAL = 0
+SERVO_REVERSE = 90
 
 # Extra green time from IoT (milliseconds per button press)
 IOT_GREEN_BONUS_MS = 3000
@@ -278,6 +278,21 @@ class Xml:
             f'<value name="A">{a_xml}</value><value name="B">{b_xml}</value></block>'
         )
 
+    def math_divide(self, a_xml: str, b_xml: str, bid: str | None = None) -> str:
+        bid = bid or self.bid()
+        return (
+            f'<block type="math_arithmetic" id="{bid}"><field name="OP">DIVIDE</field>'
+            f'<value name="A">{a_xml}</value><value name="B">{b_xml}</value></block>'
+        )
+
+    def repeat_times(self, times_xml: str, body: str, bid: str | None = None) -> str:
+        bid = bid or self.bid()
+        return (
+            f'<block type="controls_repeat_ext" id="{bid}">'
+            f'<value name="TIMES">{times_xml}</value>'
+            f'<statement name="DO">{body}</statement></block>'
+        )
+
     def increment_var(self, var_id: str, name: str) -> str:
         return self.var_set(
             var_id,
@@ -298,6 +313,40 @@ class Xml:
             f'<block type="yolobit_pin_servo_write_angle" id="{b}"><field name="pin">6</field>'
             f'<value name="angle">{self.num(angle)}</value></block>'
         )
+
+    def servo_release(self) -> str:
+        return (
+            f'<block type="yolobit_pin_servo_release" id="{self.bid()}">'
+            f'<field name="pin">6</field></block>'
+        )
+
+    def servo_move(self, angle: int) -> str:
+        return self.chain(
+            self.servo_angle(angle),
+            self.sleep_ms(400),
+            self.servo_release(),
+        )
+
+    def wait_active_ms(
+        self,
+        duration: int | str,
+        jam_tick: str,
+        v_dist: str,
+        dist_name: str,
+        ch_distance: str,
+    ) -> str:
+        if isinstance(duration, int):
+            times_xml = self.num(duration // LOOP_MS)
+        else:
+            times_xml = self.math_divide(duration, self.num(LOOP_MS))
+        tick = self.chain(
+            self.mqtt_check(),
+            jam_tick,
+            self.var_set(v_dist, dist_name, self.ultrasonic_read_cm()),
+            self.mqtt_publish(ch_distance, self.var_get(v_dist, dist_name)),
+            self.sleep_ms(LOOP_MS),
+        )
+        return self.repeat_times(times_xml, tick)
 
     def ultrasonic_create(self) -> str:
         b = self.bid()
@@ -424,14 +473,19 @@ def dat_den_h1(h1, h2):
   den_huong1(h1)
   den_huong2(h2)
 
+def servo_quay(goc):
+  pin6.servo_write(goc)
+  time.sleep_ms(400)
+  pin6.servo_release()
+
 def servo_dao_lan(bat):
   global dao_lan
   dao_lan = 1 if bat else 0
   if bat:
-    pin6.servo_write(SERVO_DAO)
+    servo_quay(SERVO_DAO)
     hien_lcd('Dao lan ON', 'Tang luu thong')
   else:
-    pin6.servo_write(SERVO_BT)
+    servo_quay(SERVO_BT)
     hien_lcd('Dao lan OFF', 'Binh thuong')
 
 def gui_trang_thai(msg):
@@ -502,7 +556,17 @@ if True:
   dao_lan = 0
   display.clear()
   tiny_rgb.show(0, hex_to_rgb('#000000'))
-  pin6.servo_write(SERVO_BT)
+  time.sleep_ms(300)
+  try:
+    kc = int(aiot_ultrasonic.distance_cm())
+  except OSError:
+    kc = 999
+  hien_lcd('Sieu am OK', str(kc) + ' cm')
+  servo_quay(SERVO_BT)
+  time.sleep_ms(300)
+  servo_quay(SERVO_DAO)
+  time.sleep_ms(300)
+  servo_quay(SERVO_BT)
   hien_lcd('Giao thong OK', 'San sang')
   mqtt.connect_wifi(WIFI_NAME, WIFI_PASS)
   mqtt.connect_broker(server='mqtt.ohstem.vn', port=1883, username=IOT_USER, password='')
@@ -553,6 +617,33 @@ def build_xml() -> str:
 
     jam_ticks = JAM_HOLD_MS // LOOP_MS
 
+    jam_tick = x.stmt_if(
+        x.ultrasonic_near(JAM_DISTANCE_CM),
+        x.chain(
+            x.increment_var(v_jam_cnt, "dem ket xe"),
+            x.stmt_if(
+                x.logic_and(
+                    x.compare_gte(
+                        x.var_get(v_jam_cnt, "dem ket xe"),
+                        x.num(jam_ticks),
+                    ),
+                    x.logic_not(
+                        x.compare_eq(
+                            x.var_get(v_jam, "dang ket xe"),
+                            x.num(1),
+                        )
+                    ),
+                ),
+                x.chain(
+                    x.var_set(v_jam, "dang ket xe", x.num(1)),
+                    x.mqtt_publish(CH_STATUS, x.text("KET XE!")),
+                    x.lcd_two_lines("CANH BAO KET XE", "Dung tren IoT"),
+                ),
+            ),
+        ),
+        x.var_set(v_jam_cnt, "dem ket xe", x.num(0)),
+    )
+
     lights_g1_r2 = x.chain(
         x.den1_matrix(MATRIX_GREEN),
         x.rgb2("#ff0000"),
@@ -580,54 +671,35 @@ def build_xml() -> str:
         x.compare_eq(x.var_get(v_step, "buoc den"), x.num(0)),
         x.chain(
             lights_g1_r2,
-            x.sleep_ms(green1_ms),
+            x.wait_active_ms(green1_ms, jam_tick, v_dist, "khoang cach", CH_DISTANCE),
             x.var_set(v_bonus1, "them xanh 1", x.num(0)),
             x.var_set(v_step, "buoc den", x.num(1)),
         ),
     )
     phase1 = x.stmt_if(
         x.compare_eq(x.var_get(v_step, "buoc den"), x.num(1)),
-        x.chain(lights_y1_r2, x.sleep_ms(YELLOW_MS), x.var_set(v_step, "buoc den", x.num(2))),
+        x.chain(
+            lights_y1_r2,
+            x.wait_active_ms(YELLOW_MS, jam_tick, v_dist, "khoang cach", CH_DISTANCE),
+            x.var_set(v_step, "buoc den", x.num(2)),
+        ),
     )
     phase2 = x.stmt_if(
         x.compare_eq(x.var_get(v_step, "buoc den"), x.num(2)),
         x.chain(
             lights_r1_g2,
-            x.sleep_ms(green2_ms),
+            x.wait_active_ms(green2_ms, jam_tick, v_dist, "khoang cach", CH_DISTANCE),
             x.var_set(v_bonus2, "them xanh 2", x.num(0)),
             x.var_set(v_step, "buoc den", x.num(3)),
         ),
     )
     phase3 = x.stmt_if(
         x.compare_eq(x.var_get(v_step, "buoc den"), x.num(3)),
-        x.chain(lights_r1_y2, x.sleep_ms(YELLOW_MS), x.var_set(v_step, "buoc den", x.num(0))),
-    )
-
-    jam_detect = x.stmt_if(
-        x.ultrasonic_near(JAM_DISTANCE_CM),
         x.chain(
-            x.increment_var(v_jam_cnt, "dem ket xe"),
-            x.stmt_if(
-                x.logic_and(
-                    x.compare_gte(
-                        x.var_get(v_jam_cnt, "dem ket xe"),
-                        x.num(jam_ticks),
-                    ),
-                    x.logic_not(
-                        x.compare_eq(
-                            x.var_get(v_jam, "dang ket xe"),
-                            x.num(1),
-                        )
-                    ),
-                ),
-                x.chain(
-                    x.var_set(v_jam, "dang ket xe", x.num(1)),
-                    x.mqtt_publish(CH_STATUS, x.text("KET XE!")),
-                    x.lcd_two_lines("CANH BAO KET XE", "Dung tren IoT"),
-                ),
-            ),
+            lights_r1_y2,
+            x.wait_active_ms(YELLOW_MS, jam_tick, v_dist, "khoang cach", CH_DISTANCE),
+            x.var_set(v_step, "buoc den", x.num(0)),
         ),
-        x.var_set(v_jam_cnt, "dem ket xe", x.num(0)),
     )
 
     mqtt_callbacks = x.chain(
@@ -674,13 +746,13 @@ def build_xml() -> str:
             x.stmt_if(
                 x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("1")),
                 x.chain(
-                    x.servo_angle(SERVO_REVERSE),
+                    x.servo_move(SERVO_REVERSE),
                     x.lcd_two_lines("Dao lan ON", "Tang luu thong"),
                 ),
                 else_do=x.stmt_if(
                     x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("0")),
                     x.chain(
-                        x.servo_angle(SERVO_NORMAL),
+                        x.servo_move(SERVO_NORMAL),
                         x.lcd_two_lines("Dao lan OFF", "Binh thuong"),
                     ),
                 ),
@@ -689,10 +761,6 @@ def build_xml() -> str:
     )
 
     forever = x.chain(
-        x.mqtt_check(),
-        jam_detect,
-        x.var_set(v_dist, "khoang cach", x.ultrasonic_read_cm()),
-        x.mqtt_publish(CH_DISTANCE, x.var_get(v_dist, "khoang cach")),
         phase0,
         phase1,
         phase2,
@@ -708,9 +776,30 @@ def build_xml() -> str:
         x.var_set(v_bonus2, "them xanh 2", x.num(0)),
         x.display_clear(),
         x.rgb2("#000000"),
-        x.servo_angle(SERVO_NORMAL),
-        x.lcd_two_lines("Giao thong OK", "San sang"),
         x.ultrasonic_create(),
+        x.sleep_ms(300),
+        x.var_set(v_dist, "khoang cach", x.ultrasonic_read_cm()),
+        x.chain(
+            f'<block type="aiot_lcd1602_clear" id="{x.bid()}"></block>',
+            (
+                f'<block type="aiot_lcd1602_display" id="{x.bid()}">'
+                f'<value name="string">{x.text("Sieu am OK")}</value>'
+                f'<value name="X">{x.num(0)}</value>'
+                f'<value name="Y">{x.num(0)}</value></block>'
+            ),
+            (
+                f'<block type="aiot_lcd1602_display" id="{x.bid()}">'
+                f'<value name="string">{x.num_to_text(x.var_get(v_dist, "khoang cach"))}</value>'
+                f'<value name="X">{x.num(0)}</value>'
+                f'<value name="Y">{x.num(1)}</value></block>'
+            ),
+        ),
+        x.servo_move(SERVO_NORMAL),
+        x.sleep_ms(300),
+        x.servo_move(SERVO_REVERSE),
+        x.sleep_ms(300),
+        x.servo_move(SERVO_NORMAL),
+        x.lcd_two_lines("Giao thong OK", "San sang"),
         x.mqtt_wifi(),
         x.mqtt_broker(),
         mqtt_callbacks,
@@ -933,6 +1022,7 @@ def validate_python(py: str) -> None:
         "tiny_rgb.show",
         "display.set_all",
         "pin6.servo_write",
+        "pin6.servo_release",
         "KET XE!",
         str(GREEN_MS),
         str(JAM_DISTANCE_CM),
@@ -971,6 +1061,7 @@ def validate_xml(xml: str) -> None:
         "yolobit_mqtt_check_message",
         "yolobit_basic_sleep",
         "aiot_ultrasonic_create",
+        "controls_repeat_ext",
     }
     bad = {"yolobit_display_show_image", "yolobit_display_clear", "yolobit_led_set_all"}
     invalid = found & bad
