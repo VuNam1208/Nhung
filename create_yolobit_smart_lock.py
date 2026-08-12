@@ -153,17 +153,37 @@ class Xml:
         """Return index of </block> for the last block in a linear next-chain."""
         close_idx = Xml._top_level_close_index(xml)
         inner = xml[:close_idx]
-        next_pos = inner.rfind("<next>")
-        if next_pos == -1:
+
+        # Only follow <next> tags that are direct children of the outer block.
+        # Using rfind("<next>") wrongly nests into ACTION bodies (e.g. mqtt V3 inside V2).
+        depth = 0
+        last_top_next = -1
+        i = 0
+        while i < len(inner):
+            if inner.startswith("<block", i):
+                depth += 1
+                i += 6
+                continue
+            if inner.startswith("</block>", i):
+                depth -= 1
+                i += 8
+                continue
+            if depth == 1 and inner.startswith("<next>", i):
+                last_top_next = i
+                i += 6
+                continue
+            i += 1
+
+        if last_top_next == -1:
             return close_idx
 
-        after_next = xml[next_pos + 6 : close_idx].lstrip()
+        after_next = inner[last_top_next + 6 :].lstrip()
         if not after_next.startswith("<block"):
             return close_idx
 
-        lead = len(xml[next_pos + 6 : close_idx]) - len(after_next)
+        lead = len(inner[last_top_next + 6 :]) - len(after_next)
         sub_tail = Xml._chain_tail_close_index(after_next)
-        return next_pos + 6 + lead + sub_tail
+        return last_top_next + 6 + lead + sub_tail
 
     def stmt_if(self, cond: str, do: str, else_do: str | None = None, bid: str | None = None) -> str:
         bid = bid or self.bid()
