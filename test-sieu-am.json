@@ -1,0 +1,15 @@
+{
+  "mode": "python",
+  "name": "Test sieu am",
+  "device": "yolobit",
+  "xmlText": "<xml xmlns=\"https://developers.google.com/blockly/xml\"><block type=\"yolobit_basic_forever\" id=\"main\" x=\"20\" y=\"20\"><statement name=\"ONSTART\"></statement><statement name=\"FOREVER\"></statement></block></xml>",
+  "python": "from yolobit import *\nimport time\nfrom aiot_lcd1602 import LCD1602\nfrom aiot_hcsr04 import HCSR04\n\naiot_lcd1602 = LCD1602()\naiot_ultrasonic = None\nkhoang_cach = 999\n\ndef hien_kc():\n  global khoang_cach\n  if aiot_ultrasonic is None:\n    khoang_cach = 999\n  else:\n    try:\n      khoang_cach = int(aiot_ultrasonic.distance_cm())\n    except OSError:\n      khoang_cach = 999\n  aiot_lcd1602.clear()\n  aiot_lcd1602.move_to(0, 0)\n  aiot_lcd1602.putstr('Khoang cach')\n  aiot_lcd1602.move_to(0, 1)\n  aiot_lcd1602.putstr(str(khoang_cach) + ' cm')\n\naiot_lcd1602.clear()\naiot_lcd1602.move_to(0, 0)\naiot_lcd1602.putstr('Test sieu am')\naiot_lcd1602.move_to(0, 1)\naiot_lcd1602.putstr('P10/P13')\ntime.sleep_ms(800)\naiot_ultrasonic = HCSR04(trigger_pin=pin10.pin, echo_pin=pin13.pin)\ntime.sleep_ms(500)\n\nwhile True:\n  hien_kc()\n  time.sleep_ms(200)\n",
+  "extensions": [
+    {
+      "id": "yolobit-AITT-VN-yolobit_extension_aiot",
+      "src": "https://github.com/AITT-VN/yolobit_extension_aiot",
+      "name": "AIOT Kit",
+      "description": "Mục mở rộng dành cho bộ kit AIoT"
+    }
+  ]
+}

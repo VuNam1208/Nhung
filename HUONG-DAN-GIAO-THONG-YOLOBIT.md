@@ -7,13 +7,23 @@
 1. Mở [https://app.ohstem.vn/](https://app.ohstem.vn/) → **Lập trình Yolo:Bit**
 2. **Mở rộng** → cài **AIOT Kit** + **MQTT** trước (chờ báo cài xong)
 3. **Quản lý chương trình** → **Import project** → file JSON bên dưới
-4. Sau import phải thấy khối **Khi bắt đầu / Lặp lại mãi** trên màn hình. Nếu trống:
-   - Xóa project vừa import → **Ctrl+F5** tải lại trang
-   - Cài lại **AIOT Kit** + **MQTT** → Import lại file mới nhất từ GitHub
+4. **Bật chế độ Python** (nút trên cùng giao diện) — code chạy từ Python, không phải khối lệnh
 5. Sửa WiFi / username IoT:
    - WiFi: `TenWiFi` / `MatKhauWiFi`
    - Username Bảng IoT: `TenUsernameIoT`
 6. **Chạy** → **Lưu project vào thiết bị**
+
+## Kiểm tra phần cứng khi bật nguồn
+
+| Thứ tự | LCD hiện | Ý nghĩa |
+|--------|----------|---------|
+| 1 | `Khoi tao...` / `Sieu am P10/13` | Đang khởi tạo siêu âm |
+| 2 | `Sieu am OK` + số cm | Cảm biến hoạt động |
+| 3 | `Test servo...` / `P6` | Servo quay 0°→90°→0° |
+| 4 | `Giao thong OK` | Kết nối IoT |
+| 5 | Dòng 2: `KC:XXcm` | Khoảng cách liên tục |
+
+**Nút A** = servo đảo ON (90°), **Nút B** = servo OFF (0°) — test không cần IoT.
 
 Tải trực tiếp từ GitHub (**bắt buộc dùng bản mới — bản cũ trên `main` trước 2026-08-12 bị lỗi trống khối lệnh**):
 
@@ -39,8 +49,8 @@ Nếu link trên vẫn trống, thử tải file từ máy tính sau khi `git pu
 | Thời gian đèn vàng | `2000` ms | Mỗi lượt vàng |
 | Ngưỡng kẹt xe | `15` cm | Siêu âm nhỏ hơn = có xe |
 | Thời gian xác nhận kẹt | `5000` ms | Giữ ngưỡng bao lâu |
-| Servo bình thường | `20`° | Làn mặc định |
-| Servo đảo chiều | `110`° | Mở thêm làn |
+| Servo bình thường | `0`° | Làn mặc định |
+| Servo đảo chiều | `90`° | Mở thêm làn |
 
 ## Chế độ bình thường
 

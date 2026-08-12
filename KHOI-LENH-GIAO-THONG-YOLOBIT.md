@@ -21,7 +21,7 @@
 đặt dang ket xe = 0
 xóa màn hình Yolo:Bit
 RGB P0 tắt (#000000)
-Servo P6 → 20°
+Servo P6 → 0°
 LCD: "Giao thong OK" / "San sang"
 Khởi tạo siêu âm P10/P13
 Kết nối WiFi + MQTT username "TenUsernameIoT"
