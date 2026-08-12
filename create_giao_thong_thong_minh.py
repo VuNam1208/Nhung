@@ -426,7 +426,6 @@ class Xml:
 
 
 def build_python() -> str:
-    jam_ticks = JAM_HOLD_MS // LOOP_MS
     return f'''from yolobit import *
 import time
 from mqtt import *
@@ -434,14 +433,9 @@ from aiot_lcd1602 import LCD1602
 from aiot_rgbled import RGBLed
 from aiot_hcsr04 import HCSR04
 
-aiot_lcd1602 = LCD1602()
-tiny_rgb = RGBLed(pin0.pin, 4)
-aiot_ultrasonic = HCSR04(trigger_pin=pin10.pin, echo_pin=pin13.pin)
-
 WIFI_NAME = '{WIFI_NAME}'
 WIFI_PASS = '{WIFI_PASS}'
 IOT_USER = '{IOT_USERNAME}'
-
 XANH_MS = {GREEN_MS}
 VANG_MS = {YELLOW_MS}
 NGUONG_CM = {JAM_DISTANCE_CM}
@@ -451,13 +445,17 @@ THEM_XANH_MS = {IOT_GREEN_BONUS_MS}
 SERVO_BT = {SERVO_NORMAL}
 SERVO_DAO = {SERVO_REVERSE}
 
+aiot_lcd1602 = LCD1602()
+tiny_rgb = RGBLed(pin0.pin, 4)
+aiot_ultrasonic = None
+
 buoc_den = 0
 dem_ket = 0
 dang_ket = 0
 them_xanh_1 = 0
 them_xanh_2 = 0
-dao_lan = 0
-thong_tin = ''
+con_lai = 0
+khoang_cach = 999
 
 def hien_lcd(d1, d2=''):
   aiot_lcd1602.clear()
@@ -491,40 +489,53 @@ def dat_den_h1(h1, h2):
   den_huong1(h1)
   den_huong2(h2)
 
-def servo_quay(goc):
-  pin6.servo_write(goc)
-  time.sleep_ms(400)
-  pin6.servo_release()
+def doc_khoang_cach():
+  global khoang_cach
+  if aiot_ultrasonic is None:
+    khoang_cach = 999
+    return 999
+  try:
+    khoang_cach = int(aiot_ultrasonic.distance_cm())
+  except OSError:
+    khoang_cach = 999
+  return khoang_cach
 
-def servo_dao_lan(bat):
-  global dao_lan
-  dao_lan = 1 if bat else 0
-  if bat:
-    servo_quay(SERVO_DAO)
-    hien_lcd('Dao lan ON', 'Tang luu thong')
-  else:
-    servo_quay(SERVO_BT)
-    hien_lcd('Dao lan OFF', 'Binh thuong')
+def hien_kc(d1):
+  kc = doc_khoang_cach()
+  hien_lcd(d1, 'KC:' + str(kc) + 'cm')
+
+def servo_giu(goc):
+  pin6.servo_write(goc)
+  time.sleep_ms(600)
+
+def khoi_tao_sieu_am():
+  global aiot_ultrasonic
+  time.sleep_ms(500)
+  aiot_ultrasonic = HCSR04(trigger_pin=pin10.pin, echo_pin=pin13.pin)
+  time.sleep_ms(500)
+  for _ in range(5):
+    doc_khoang_cach()
+    time.sleep_ms(150)
+
+def khoi_tao_servo():
+  servo_giu(SERVO_BT)
+  time.sleep_ms(800)
+  servo_giu(SERVO_DAO)
+  time.sleep_ms(800)
+  servo_giu(SERVO_BT)
 
 def gui_trang_thai(msg):
   mqtt.publish('{CH_STATUS}', str(msg))
 
 def gui_khoang_cach():
-  try:
-    kc = int(aiot_ultrasonic.distance_cm())
-  except OSError:
-    kc = 999
+  kc = doc_khoang_cach()
   mqtt.publish('{CH_DISTANCE}', str(kc))
   aiot_lcd1602.move_to(0, 1)
-  aiot_lcd1602.putstr('KC: ' + str(kc) + ' cm')
+  aiot_lcd1602.putstr(('KC:' + str(kc) + 'cm')[:16])
 
 def kiem_tra_ket_xe():
   global dem_ket, dang_ket
-  try:
-    gan = aiot_ultrasonic.distance_cm() < NGUONG_CM
-  except OSError:
-    gan = False
-  if gan:
+  if doc_khoang_cach() < NGUONG_CM:
     dem_ket += 1
   else:
     dem_ket = 0
@@ -533,315 +544,104 @@ def kiem_tra_ket_xe():
     gui_trang_thai('KET XE!')
     hien_lcd('CANH BAO KET XE', 'Dung tren IoT')
 
-def cho_co(ms):
-  con = ms
-  while con > 0:
-    mqtt.check_message()
-    kiem_tra_ket_xe()
-    gui_khoang_cach()
-    buoc = VONG_MS if con > VONG_MS else con
-    time.sleep_ms(buoc)
-    con -= buoc
+def bat_dau_pha(tg, h1, h2, lcd1, lcd2):
+  global con_lai
+  dat_den_h1(h1, h2)
+  hien_lcd(lcd1, lcd2)
+  con_lai = tg
 
-def on_{CH_GREEN1.lower()}(msg):
+def chuyen_pha():
+  global buoc_den, them_xanh_1, them_xanh_2
+  if buoc_den == 0:
+    tg = XANH_MS + them_xanh_1
+    them_xanh_1 = 0
+    bat_dau_pha(tg, 'X', 'D', 'Huong 1: XANH', 'Huong 2: DO')
+    buoc_den = 1
+  elif buoc_den == 1:
+    bat_dau_pha(VANG_MS, 'V', 'D', 'Huong 1: VANG', 'Huong 2: DO')
+    buoc_den = 2
+  elif buoc_den == 2:
+    tg = XANH_MS + them_xanh_2
+    them_xanh_2 = 0
+    bat_dau_pha(tg, 'D', 'X', 'Huong 1: DO', 'Huong 2: XANH')
+    buoc_den = 3
+  else:
+    bat_dau_pha(VANG_MS, 'D', 'V', 'Huong 1: DO', 'Huong 2: VANG')
+    buoc_den = 0
+
+def on_v2(msg):
   global them_xanh_1
   if str(msg) in ('1', 'MO'):
     them_xanh_1 += THEM_XANH_MS
 
-def on_{CH_GREEN2.lower()}(msg):
+def on_v3(msg):
   global them_xanh_2
   if str(msg) in ('1', 'MO'):
     them_xanh_2 += THEM_XANH_MS
 
-def on_{CH_LCD_ROUTE.lower()}(msg):
+def on_v4(msg):
   if str(msg) in ('1', 'MO'):
-    hien_lcd('KET XE PHIA TRUOC', 'Di duong phu A')
+    hien_kc('KET XE TRUOC')
 
-def on_{CH_LCD_LANE.lower()}(msg):
+def on_v5(msg):
   if str(msg) in ('1', 'MO'):
-    hien_lcd('MO LANE CHUNG', 'Xe may duoc di')
+    hien_kc('MO LANE CHUNG')
 
-def on_{CH_LANE_REV.lower()}(msg):
+def on_v6(msg):
   if str(msg) in ('1', 'MO', 'ON'):
-    servo_dao_lan(True)
+    servo_giu(SERVO_DAO)
+    hien_kc('Dao lan ON')
   elif str(msg) in ('0', 'OFF'):
-    servo_dao_lan(False)
+    servo_giu(SERVO_BT)
+    hien_kc('Dao lan OFF')
 
-if True:
-  buoc_den = 0
-  dem_ket = 0
-  dang_ket = 0
-  them_xanh_1 = 0
-  them_xanh_2 = 0
-  dao_lan = 0
-  display.clear()
-  tiny_rgb.show(0, hex_to_rgb('#000000'))
-  time.sleep_ms(300)
-  try:
-    kc = int(aiot_ultrasonic.distance_cm())
-  except OSError:
-    kc = 999
-  hien_lcd('Sieu am OK', str(kc) + ' cm')
-  servo_quay(SERVO_BT)
-  time.sleep_ms(300)
-  servo_quay(SERVO_DAO)
-  time.sleep_ms(300)
-  servo_quay(SERVO_BT)
-  hien_lcd('Giao thong OK', 'San sang')
+def khoi_tao_mqtt():
   mqtt.connect_wifi(WIFI_NAME, WIFI_PASS)
   mqtt.connect_broker(server='mqtt.ohstem.vn', port=1883, username=IOT_USER, password='')
-  mqtt.on_receive_message('{CH_GREEN1}', on_{CH_GREEN1.lower()})
-  mqtt.on_receive_message('{CH_GREEN2}', on_{CH_GREEN2.lower()})
-  mqtt.on_receive_message('{CH_LCD_ROUTE}', on_{CH_LCD_ROUTE.lower()})
-  mqtt.on_receive_message('{CH_LCD_LANE}', on_{CH_LCD_LANE.lower()})
-  mqtt.on_receive_message('{CH_LANE_REV}', on_{CH_LANE_REV.lower()})
+  mqtt.on_receive_message('{CH_GREEN1}', on_v2)
+  mqtt.on_receive_message('{CH_GREEN2}', on_v3)
+  mqtt.on_receive_message('{CH_LCD_ROUTE}', on_v4)
+  mqtt.on_receive_message('{CH_LCD_LANE}', on_v5)
+  mqtt.on_receive_message('{CH_LANE_REV}', on_v6)
   gui_trang_thai('BINH THUONG')
 
+display.clear()
+tiny_rgb.show(0, hex_to_rgb('#000000'))
+hien_lcd('Khoi tao...', 'Sieu am P10/13')
+khoi_tao_sieu_am()
+hien_lcd('Sieu am OK', str(doc_khoang_cach()) + ' cm')
+time.sleep_ms(2500)
+hien_lcd('Test servo...', 'P6')
+khoi_tao_servo()
+hien_lcd('Giao thong OK', 'Ket noi IoT')
+khoi_tao_mqtt()
+chuyen_pha()
+
 while True:
-  if buoc_den == 0:
-    dat_den_h1('X', 'D')
-    hien_lcd('Huong 1: XANH', 'Huong 2: DO')
-    tg = XANH_MS + them_xanh_1
-    them_xanh_1 = 0
-    cho_co(tg)
-    buoc_den = 1
-  elif buoc_den == 1:
-    dat_den_h1('V', 'D')
-    hien_lcd('Huong 1: VANG', 'Huong 2: DO')
-    cho_co(VANG_MS)
-    buoc_den = 2
-  elif buoc_den == 2:
-    dat_den_h1('D', 'X')
-    hien_lcd('Huong 1: DO', 'Huong 2: XANH')
-    tg = XANH_MS + them_xanh_2
-    them_xanh_2 = 0
-    cho_co(tg)
-    buoc_den = 3
+  mqtt.check_message()
+  kiem_tra_ket_xe()
+  gui_khoang_cach()
+  if button_a.is_pressed() and not button_b.is_pressed():
+    servo_giu(SERVO_DAO)
+    hien_kc('Nut A: Dao ON')
+  if button_b.is_pressed() and not button_a.is_pressed():
+    servo_giu(SERVO_BT)
+    hien_kc('Nut B: Dao OFF')
+  if con_lai <= 0:
+    chuyen_pha()
   else:
-    dat_den_h1('D', 'V')
-    hien_lcd('Huong 1: DO', 'Huong 2: VANG')
-    cho_co(VANG_MS)
-    buoc_den = 0
+    con_lai -= VONG_MS
+  time.sleep_ms(VONG_MS)
 '''
 
 
 def build_xml() -> str:
-    x = Xml()
-    v_step = "vStep"
-    v_jam_cnt = "vJamCnt"
-    v_jam = "vJam"
-    v_bonus1 = "vBonus1"
-    v_bonus2 = "vBonus2"
-    v_msg = "vMsg"
-    v_dist = "vDist"
-
-    jam_ticks = JAM_HOLD_MS // LOOP_MS
-
-    jam_tick = x.stmt_if(
-        x.ultrasonic_near(JAM_DISTANCE_CM),
-        x.chain(
-            x.increment_var(v_jam_cnt, "dem ket xe"),
-            x.stmt_if(
-                x.logic_and(
-                    x.compare_gte(
-                        x.var_get(v_jam_cnt, "dem ket xe"),
-                        x.num(jam_ticks),
-                    ),
-                    x.logic_not(
-                        x.compare_eq(
-                            x.var_get(v_jam, "dang ket xe"),
-                            x.num(1),
-                        )
-                    ),
-                ),
-                x.chain(
-                    x.var_set(v_jam, "dang ket xe", x.num(1)),
-                    x.mqtt_publish(CH_STATUS, x.text("KET XE!")),
-                    x.lcd_two_lines("CANH BAO KET XE", "Dung tren IoT"),
-                ),
-            ),
-        ),
-        x.var_set(v_jam_cnt, "dem ket xe", x.num(0)),
-    )
-
-    lights_g1_r2 = x.chain(
-        x.den1_matrix(MATRIX_GREEN),
-        x.rgb2("#ff0000"),
-        x.lcd_two_lines("Huong 1: XANH", "Huong 2: DO"),
-    )
-    lights_y1_r2 = x.chain(
-        x.den1_matrix(MATRIX_YELLOW),
-        x.rgb2("#ff0000"),
-        x.lcd_two_lines("Huong 1: VANG", "Huong 2: DO"),
-    )
-    lights_r1_g2 = x.chain(
-        x.den1_matrix(MATRIX_RED),
-        x.rgb2("#00ff00"),
-        x.lcd_two_lines("Huong 1: DO", "Huong 2: XANH"),
-    )
-    lights_r1_y2 = x.chain(
-        x.den1_matrix(MATRIX_RED),
-        x.rgb2("#ffff00"),
-        x.lcd_two_lines("Huong 1: DO", "Huong 2: VANG"),
-    )
-
-    green1_ms = x.math_add(x.num(GREEN_MS), x.var_get(v_bonus1, "them xanh 1"))
-    green2_ms = x.math_add(x.num(GREEN_MS), x.var_get(v_bonus2, "them xanh 2"))
-    phase0 = x.stmt_if(
-        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(0)),
-        x.chain(
-            lights_g1_r2,
-            x.wait_active_ms(green1_ms, jam_tick, v_dist, "khoang cach", CH_DISTANCE),
-            x.var_set(v_bonus1, "them xanh 1", x.num(0)),
-            x.var_set(v_step, "buoc den", x.num(1)),
-        ),
-    )
-    phase1 = x.stmt_if(
-        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(1)),
-        x.chain(
-            lights_y1_r2,
-            x.wait_active_ms(YELLOW_MS, jam_tick, v_dist, "khoang cach", CH_DISTANCE),
-            x.var_set(v_step, "buoc den", x.num(2)),
-        ),
-    )
-    phase2 = x.stmt_if(
-        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(2)),
-        x.chain(
-            lights_r1_g2,
-            x.wait_active_ms(green2_ms, jam_tick, v_dist, "khoang cach", CH_DISTANCE),
-            x.var_set(v_bonus2, "them xanh 2", x.num(0)),
-            x.var_set(v_step, "buoc den", x.num(3)),
-        ),
-    )
-    phase3 = x.stmt_if(
-        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(3)),
-        x.chain(
-            lights_r1_y2,
-            x.wait_active_ms(YELLOW_MS, jam_tick, v_dist, "khoang cach", CH_DISTANCE),
-            x.var_set(v_step, "buoc den", x.num(0)),
-        ),
-    )
-
-    mqtt_callbacks = x.chain(
-        x.mqtt_on_receive(
-            CH_GREEN1,
-            v_msg,
-            "thong tin",
-            x.stmt_if(
-                x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("1")),
-                x.add_to_var(v_bonus1, "them xanh 1", IOT_GREEN_BONUS_MS),
-            ),
-        ),
-        x.mqtt_on_receive(
-            CH_GREEN2,
-            v_msg,
-            "thong tin",
-            x.stmt_if(
-                x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("1")),
-                x.add_to_var(v_bonus2, "them xanh 2", IOT_GREEN_BONUS_MS),
-            ),
-        ),
-        x.mqtt_on_receive(
-            CH_LCD_ROUTE,
-            v_msg,
-            "thong tin",
-            x.stmt_if(
-                x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("1")),
-                x.lcd_two_lines("KET XE PHIA TRUOC", "Di duong phu A"),
-            ),
-        ),
-        x.mqtt_on_receive(
-            CH_LCD_LANE,
-            v_msg,
-            "thong tin",
-            x.stmt_if(
-                x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("1")),
-                x.lcd_two_lines("MO LANE CHUNG", "Xe may duoc di"),
-            ),
-        ),
-        x.mqtt_on_receive(
-            CH_LANE_REV,
-            v_msg,
-            "thong tin",
-            x.stmt_if(
-                x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("1")),
-                x.chain(
-                    x.servo_move(SERVO_REVERSE),
-                    x.lcd_two_lines("Dao lan ON", "Tang luu thong"),
-                ),
-                else_do=x.stmt_if(
-                    x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("0")),
-                    x.chain(
-                        x.servo_move(SERVO_NORMAL),
-                        x.lcd_two_lines("Dao lan OFF", "Binh thuong"),
-                    ),
-                ),
-            ),
-        ),
-    )
-
-    forever = x.chain(
-        phase0,
-        phase1,
-        phase2,
-        phase3,
-        x.sleep_ms(LOOP_MS),
-    )
-
-    onstart = x.chain(
-        x.var_set(v_step, "buoc den", x.num(0)),
-        x.var_set(v_jam_cnt, "dem ket xe", x.num(0)),
-        x.var_set(v_jam, "dang ket xe", x.num(0)),
-        x.var_set(v_bonus1, "them xanh 1", x.num(0)),
-        x.var_set(v_bonus2, "them xanh 2", x.num(0)),
-        x.display_clear(),
-        x.rgb2("#000000"),
-        x.ultrasonic_create(),
-        x.sleep_ms(300),
-        x.var_set(v_dist, "khoang cach", x.ultrasonic_read_cm()),
-        x.chain(
-            f'<block type="aiot_lcd1602_clear" id="{x.bid()}"></block>',
-            (
-                f'<block type="aiot_lcd1602_display" id="{x.bid()}">'
-                f'<value name="string">{x.text("Sieu am OK")}</value>'
-                f'<value name="X">{x.num(0)}</value>'
-                f'<value name="Y">{x.num(0)}</value></block>'
-            ),
-            (
-                f'<block type="aiot_lcd1602_display" id="{x.bid()}">'
-                f'<value name="string">{x.num_to_text(x.var_get(v_dist, "khoang cach"))}</value>'
-                f'<value name="X">{x.num(0)}</value>'
-                f'<value name="Y">{x.num(1)}</value></block>'
-            ),
-        ),
-        x.sleep_ms(2000),
-        x.servo_move(SERVO_NORMAL),
-        x.sleep_ms(300),
-        x.servo_move(SERVO_REVERSE),
-        x.sleep_ms(300),
-        x.servo_move(SERVO_NORMAL),
-        x.lcd_two_lines("Giao thong OK", "San sang"),
-        x.mqtt_wifi(),
-        x.mqtt_broker(),
-        mqtt_callbacks,
-        x.mqtt_publish(CH_STATUS, x.text("BINH THUONG")),
-    )
-
-    fb = x.bid()
+    """Minimal Blockly stub — logic runs from embedded Python."""
     return (
         '<xml xmlns="https://developers.google.com/blockly/xml">'
-        "<variables>"
-        f'<variable id="{v_step}">buoc den</variable>'
-        f'<variable id="{v_jam_cnt}">dem ket xe</variable>'
-        f'<variable id="{v_jam}">dang ket xe</variable>'
-        f'<variable id="{v_bonus1}">them xanh 1</variable>'
-        f'<variable id="{v_bonus2}">them xanh 2</variable>'
-        f'<variable id="{v_msg}">thong tin</variable>'
-        f'<variable id="{v_dist}">khoang cach</variable>'
-        "</variables>"
-        f'<block type="yolobit_basic_forever" id="{fb}" x="20" y="20">'
-        f'<statement name="ONSTART">{onstart}</statement>'
-        f'<statement name="FOREVER">{forever}</statement>'
+        '<block type="yolobit_basic_forever" id="main" x="20" y="20">'
+        '<statement name="ONSTART"></statement>'
+        '<statement name="FOREVER"></statement>'
         "</block></xml>"
     )
 
@@ -856,13 +656,23 @@ def build_guide() -> str:
 1. Mở [https://app.ohstem.vn/](https://app.ohstem.vn/) → **Lập trình Yolo:Bit**
 2. **Mở rộng** → cài **AIOT Kit** + **MQTT** trước (chờ báo cài xong)
 3. **Quản lý chương trình** → **Import project** → file JSON bên dưới
-4. Sau import phải thấy khối **Khi bắt đầu / Lặp lại mãi** trên màn hình. Nếu trống:
-   - Xóa project vừa import → **Ctrl+F5** tải lại trang
-   - Cài lại **AIOT Kit** + **MQTT** → Import lại file mới nhất từ GitHub
+4. **Bật chế độ Python** (nút trên cùng giao diện) — code chạy từ Python, không phải khối lệnh
 5. Sửa WiFi / username IoT:
    - WiFi: `{WIFI_NAME}` / `{WIFI_PASS}`
    - Username Bảng IoT: `{IOT_USERNAME}`
 6. **Chạy** → **Lưu project vào thiết bị**
+
+## Kiểm tra phần cứng khi bật nguồn
+
+| Thứ tự | LCD hiện | Ý nghĩa |
+|--------|----------|---------|
+| 1 | `Khoi tao...` / `Sieu am P10/13` | Đang khởi tạo siêu âm |
+| 2 | `Sieu am OK` + số cm | Cảm biến hoạt động |
+| 3 | `Test servo...` / `P6` | Servo quay 0°→90°→0° |
+| 4 | `Giao thong OK` | Kết nối IoT |
+| 5 | Dòng 2: `KC:XXcm` | Khoảng cách liên tục |
+
+**Nút A** = servo đảo ON (90°), **Nút B** = servo OFF (0°) — test không cần IoT.
 
 Tải trực tiếp từ GitHub (**bắt buộc dùng bản mới — bản cũ trên `main` trước 2026-08-12 bị lỗi trống khối lệnh**):
 
@@ -1043,7 +853,8 @@ def validate_python(py: str) -> None:
         "tiny_rgb.show",
         "display.set_all",
         "pin6.servo_write",
-        "pin6.servo_release",
+        "doc_khoang_cach",
+        "khoi_tao_sieu_am",
         "KET XE!",
         str(GREEN_MS),
         str(JAM_DISTANCE_CM),
@@ -1060,7 +871,7 @@ def write_project(path: Path, wifi: str, passwd: str, iot_user: str) -> None:
     xml = build_xml()
     validate_python(python)
     project = {
-        "mode": "block",
+        "mode": "python",
         "name": "Giao thong thong minh",
         "device": "yolobit",
         "xmlText": xml,
@@ -1071,37 +882,11 @@ def write_project(path: Path, wifi: str, passwd: str, iot_user: str) -> None:
 
 
 def build_test_sieu_am_xml() -> str:
-    """Minimal ultrasonic test — no MQTT, only LCD distance."""
-    x = Xml()
-    v_dist = "vDist"
-    forever = x.chain(
-        x.var_set(v_dist, "khoang cach", x.ultrasonic_read_cm()),
-        x.chain(
-            f'<block type="aiot_lcd1602_clear" id="{x.bid()}"></block>',
-            (
-                f'<block type="aiot_lcd1602_display" id="{x.bid()}">'
-                f'<value name="string">{x.text("Khoang cach")}</value>'
-                f'<value name="X">{x.num(0)}</value>'
-                f'<value name="Y">{x.num(0)}</value></block>'
-            ),
-            x.lcd_line2_distance(v_dist, "khoang cach"),
-        ),
-        x.sleep_ms(200),
-    )
-    onstart = x.chain(
-        x.lcd_two_lines("Test sieu am", "P10/P13"),
-        x.ultrasonic_create(),
-        x.sleep_ms(500),
-    )
-    fb = x.bid()
     return (
         '<xml xmlns="https://developers.google.com/blockly/xml">'
-        "<variables>"
-        f'<variable id="{v_dist}">khoang cach</variable>'
-        "</variables>"
-        f'<block type="yolobit_basic_forever" id="{fb}" x="20" y="20">'
-        f'<statement name="ONSTART">{onstart}</statement>'
-        f'<statement name="FOREVER">{forever}</statement>'
+        '<block type="yolobit_basic_forever" id="main" x="20" y="20">'
+        '<statement name="ONSTART"></statement>'
+        '<statement name="FOREVER"></statement>'
         "</block></xml>"
     )
 
@@ -1113,29 +898,32 @@ from aiot_lcd1602 import LCD1602
 from aiot_hcsr04 import HCSR04
 
 aiot_lcd1602 = LCD1602()
-aiot_ultrasonic = HCSR04(trigger_pin=pin10.pin, echo_pin=pin13.pin)
-
-khoang_cach = 0
+aiot_ultrasonic = None
+khoang_cach = 999
 
 def hien_kc():
   global khoang_cach
-  try:
-    khoang_cach = int(aiot_ultrasonic.distance_cm())
-  except OSError:
+  if aiot_ultrasonic is None:
     khoang_cach = 999
+  else:
+    try:
+      khoang_cach = int(aiot_ultrasonic.distance_cm())
+    except OSError:
+      khoang_cach = 999
   aiot_lcd1602.clear()
   aiot_lcd1602.move_to(0, 0)
   aiot_lcd1602.putstr('Khoang cach')
   aiot_lcd1602.move_to(0, 1)
   aiot_lcd1602.putstr(str(khoang_cach) + ' cm')
 
-if True:
-  aiot_lcd1602.clear()
-  aiot_lcd1602.move_to(0, 0)
-  aiot_lcd1602.putstr('Test sieu am')
-  aiot_lcd1602.move_to(0, 1)
-  aiot_lcd1602.putstr('P10/P13')
-  time.sleep_ms(500)
+aiot_lcd1602.clear()
+aiot_lcd1602.move_to(0, 0)
+aiot_lcd1602.putstr('Test sieu am')
+aiot_lcd1602.move_to(0, 1)
+aiot_lcd1602.putstr('P10/P13')
+time.sleep_ms(800)
+aiot_ultrasonic = HCSR04(trigger_pin=pin10.pin, echo_pin=pin13.pin)
+time.sleep_ms(500)
 
 while True:
   hien_kc()
@@ -1145,7 +933,7 @@ while True:
 
 def write_test_sieu_am(path: Path) -> None:
     project = {
-        "mode": "block",
+        "mode": "python",
         "name": "Test sieu am",
         "device": "yolobit",
         "xmlText": build_test_sieu_am_xml(),
@@ -1156,55 +944,8 @@ def write_test_sieu_am(path: Path) -> None:
 
 
 def validate_xml(xml: str) -> None:
-    import re
-
-    found = set(re.findall(r'type="([^"]+)"', xml))
-    required = {
-        "yolobit_basic_forever",
-        "yolobit_basic_show_image",
-        "yolobit_basic_create_image",
-        "yolobit_basic_clear_display",
-        "yolobit_mqtt_check_message",
-        "yolobit_basic_sleep",
-        "aiot_ultrasonic_create",
-        "controls_repeat_ext",
-    }
-    bad = {"yolobit_display_show_image", "yolobit_display_clear", "yolobit_led_set_all"}
-    invalid = found & bad
-    if invalid:
-        raise SystemExit(f"XML uses invalid block types: {invalid}")
-    missing = required - found
-    if missing:
-        raise SystemExit(f"XML missing required block types: {missing}")
-
-    # OhStem import expects real blocks (not only shadows) for text/number values.
-    if 'block type="text"' not in xml:
-        raise SystemExit("XML has no text blocks — OhStem may show an empty workspace")
-    if xml.count("<shadow type=\"text\"") > xml.count('block type="text"'):
-        raise SystemExit("XML uses too many text shadows — prefer block type=\"text\"")
-
-    def statement_roots(section: str) -> int:
-        depth = 0
-        tops = 0
-        for i in range(len(section)):
-            if section.startswith("<block", i):
-                if depth == 0:
-                    tops += 1
-                depth += 1
-            elif section.startswith("</block>", i):
-                depth -= 1
-        return tops
-
-    onstart = re.search(
-        r'<statement name="ONSTART">(.*)</statement>\s*<statement name="FOREVER">',
-        xml,
-        re.DOTALL,
-    )
-    forever = re.search(r'<statement name="FOREVER">(.*)</statement>\s*</block>\s*</xml>', xml, re.DOTALL)
-    if onstart and statement_roots(onstart.group(1)) != 1:
-        raise SystemExit("ONSTART must contain exactly one root block chain")
-    if forever and statement_roots(forever.group(1)) != 1:
-        raise SystemExit("FOREVER must contain exactly one root block chain")
+    if "yolobit_basic_forever" not in xml:
+        raise SystemExit("XML missing yolobit_basic_forever block")
 
 
 def main() -> None:
@@ -1218,8 +959,7 @@ def main() -> None:
     xml = json.loads(OUTPUT.read_text())["xmlText"]
     validate_xml(xml)
     assert "yolobit_basic_forever" in xml
-    assert "aiot_ultrasonic_create" in xml
-    assert "yolobit_mqtt_check_message" in xml
+    assert "doc_khoang_cach" in json.loads(OUTPUT.read_text())["python"]
     print("Created", OUTPUT)
     print("Created", OUTPUT_TEST)
     print("Created", GUIDE, BLOCK_GUIDE, IOT_GUIDE)
