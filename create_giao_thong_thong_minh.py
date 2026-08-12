@@ -209,18 +209,44 @@ class Xml:
             f'<field name="COLOUR">{colour}</field></shadow></value></block>'
         )
 
-    def den1_matrix(self, image: str, colour: str, bid: str | None = None) -> str:
-        bid = bid or self.bid()
-        sh = self.bid()
+    def create_image(self, cell_map: dict[str, str]) -> str:
+        bid = self.bid()
+        parts = []
+        for r in range(5):
+            for c in range(5):
+                key = f"{r}{c}"
+                parts.append(f'<field name="{key}">{cell_map.get(key, "#000000")}</field>')
+        return f'<block type="yolobit_basic_create_image" id="{bid}">{"".join(parts)}</block>'
+
+    @staticmethod
+    def _traffic_cells(zone: str, colour: str) -> dict[str, str]:
+        black = "#000000"
+        cells = {f"{r}{c}": black for r in range(5) for c in range(5)}
+        if zone == "red":
+            for r in (0, 1):
+                for c in (1, 2, 3):
+                    cells[f"{r}{c}"] = colour
+            cells["02"] = colour
+        elif zone == "yellow":
+            for c in (1, 2, 3):
+                cells[f"2{c}"] = colour
+        elif zone == "green":
+            for r in (3, 4):
+                for c in (1, 2, 3):
+                    cells[f"{r}{c}"] = colour
+            cells["32"] = colour
+        return cells
+
+    def den1_light(self, zone: str, colour: str) -> str:
+        bid = self.bid()
+        img = self.create_image(self._traffic_cells(zone, colour))
         return (
-            f'<block type="yolobit_display_show_image" id="{bid}">'
-            f'<field name="IMAGE">{image}</field>'
-            f'<value name="COLOUR"><shadow type="colour_picker" id="{sh}">'
-            f'<field name="COLOUR">{colour}</field></shadow></value></block>'
+            f'<block type="yolobit_basic_show_image" id="{bid}">'
+            f'<value name="image">{img}</value></block>'
         )
 
     def display_clear(self) -> str:
-        return f'<block type="yolobit_display_clear" id="{self.bid()}"></block>'
+        return f'<block type="yolobit_basic_clear_display" id="{self.bid()}"></block>'
 
     def lcd_line(self, text_xml: str, y: int) -> str:
         clear_id = self.bid()
@@ -537,22 +563,22 @@ def build_xml() -> str:
     jam_ticks = JAM_HOLD_MS // LOOP_MS
 
     lights_g1_r2 = x.chain(
-        x.den1_matrix(IMG1_GREEN, "#00ff00"),
+        x.den1_light("green", "#00ff00"),
         x.rgb2("#ff0000"),
         x.lcd_two_lines("Huong 1: XANH", "Huong 2: DO"),
     )
     lights_y1_r2 = x.chain(
-        x.den1_matrix(IMG1_YELLOW, "#ffff00"),
+        x.den1_light("yellow", "#ffff00"),
         x.rgb2("#ff0000"),
         x.lcd_two_lines("Huong 1: VANG", "Huong 2: DO"),
     )
     lights_r1_g2 = x.chain(
-        x.den1_matrix(IMG1_RED, "#ff0000"),
+        x.den1_light("red", "#ff0000"),
         x.rgb2("#00ff00"),
         x.lcd_two_lines("Huong 1: DO", "Huong 2: XANH"),
     )
     lights_r1_y2 = x.chain(
-        x.den1_matrix(IMG1_RED, "#ff0000"),
+        x.den1_light("red", "#ff0000"),
         x.rgb2("#ffff00"),
         x.lcd_two_lines("Huong 1: DO", "Huong 2: VANG"),
     )
@@ -924,6 +950,26 @@ def write_project(path: Path, wifi: str, passwd: str, iot_user: str) -> None:
     path.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def validate_xml(xml: str) -> None:
+    import re
+
+    bad = {"yolobit_display_show_image", "yolobit_display_clear"}
+    found = set(re.findall(r'type="([^"]+)"', xml))
+    invalid = found & bad
+    if invalid:
+        raise SystemExit(f"XML uses invalid block types: {invalid}")
+    required = {
+        "yolobit_basic_forever",
+        "yolobit_basic_show_image",
+        "yolobit_basic_create_image",
+        "yolobit_basic_clear_display",
+        "yolobit_mqtt_check_message",
+    }
+    missing = required - found
+    if missing:
+        raise SystemExit(f"XML missing required block types: {missing}")
+
+
 def main() -> None:
     write_project(OUTPUT, WIFI_NAME, WIFI_PASS, IOT_USERNAME)
     write_project(OUTPUT_USER, "Haha", "0383075064", "SmartTraffic123")
@@ -933,6 +979,7 @@ def main() -> None:
     IOT_GUIDE.write_text(build_iot_guide(), encoding="utf-8")
 
     xml = json.loads(OUTPUT.read_text())["xmlText"]
+    validate_xml(xml)
     assert "yolobit_basic_forever" in xml
     assert "aiot_ultrasonic_create" in xml
     assert "yolobit_mqtt_check_message" in xml
