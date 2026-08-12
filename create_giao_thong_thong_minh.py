@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 OUTPUT = Path(__file__).with_name("giao-thong-thong-minh.json")
+OUTPUT_TEST = Path(__file__).with_name("giao-thong-import-test.json")
 GUIDE = Path(__file__).with_name("HUONG-DAN-GIAO-THONG-YOLOBIT.md")
 BLOCK_GUIDE = Path(__file__).with_name("KHOI-LENH-GIAO-THONG-YOLOBIT.md")
 IOT_GUIDE = Path(__file__).with_name("BANG-IOT-GIAO-THONG.md")
@@ -213,22 +214,15 @@ class Xml:
             f'<field name="COLOUR">{colour}</field></shadow></value></block>'
         )
 
-    def den1_matrix(self, colour: str) -> str:
-        """Direction 1: native OhStem matrix blocks (show_image + create_image)."""
-        img_id = self.bid()
-        fields = "".join(
-            f'<field name="{y}{x}">{colour}</field>' for y in range(5) for x in range(5)
-        )
-        create = f'<block type="yolobit_basic_create_image" id="{img_id}">{fields}</block>'
-        show_id = self.bid()
-        return (
-            f'<block type="yolobit_basic_show_image" id="{show_id}">'
-            f'<value name="image">{create}</value></block>'
-        )
-
     def den1_led(self, colour: str, bid: str | None = None) -> str:
-        """Alias — use OhStem-native matrix blocks instead of yolobit_led_set_all."""
-        return self.den1_matrix(colour)
+        """Direction 1: Yolo:Bit 5×5 matrix via display.set_all (OhStem-native led_set_all)."""
+        bid = bid or self.bid()
+        sh = self.bid()
+        return (
+            f'<block type="yolobit_led_set_all" id="{bid}">'
+            f'<value name="COLOR"><shadow type="colour_picker" id="{sh}">'
+            f'<field name="COLOUR">{colour}</field></shadow></value></block>'
+        )
 
     def display_clear(self) -> str:
         return f'<block type="yolobit_basic_clear_display" id="{self.bid()}"></block>'
@@ -533,6 +527,32 @@ while True:
 '''
 
 
+def build_xml_minimal() -> str:
+    """Minimal project to verify OhStem import (wifi + mqtt + forever loop only)."""
+    x = Xml()
+    v_msg = "vMsg"
+    onstart = x.chain(
+        x.display_clear(),
+        x.rgb2("#000000"),
+        x.lcd_two_lines("Import OK", "Test minimal"),
+        x.mqtt_wifi(),
+        x.mqtt_broker(),
+        x.mqtt_publish(CH_STATUS, x.text("TEST OK")),
+    )
+    forever = x.chain(x.mqtt_check(), x.sleep_ms(LOOP_MS))
+    fb = x.bid()
+    return (
+        '<xml xmlns="https://developers.google.com/blockly/xml">'
+        "<variables>"
+        f'<variable id="{v_msg}">thong tin</variable>'
+        "</variables>"
+        f'<block type="yolobit_basic_forever" id="{fb}" x="20" y="20">'
+        f'<statement name="ONSTART">{onstart}</statement>'
+        f'<statement name="FOREVER">{forever}</statement>'
+        "</block></xml>"
+    )
+
+
 def build_xml() -> str:
     x = Xml()
     v_step = "vStep"
@@ -546,22 +566,22 @@ def build_xml() -> str:
     jam_ticks = JAM_HOLD_MS // LOOP_MS
 
     lights_g1_r2 = x.chain(
-        x.den1_matrix(MATRIX_GREEN),
+        x.den1_led(MATRIX_GREEN),
         x.rgb2("#ff0000"),
         x.lcd_two_lines("Huong 1: XANH", "Huong 2: DO"),
     )
     lights_y1_r2 = x.chain(
-        x.den1_matrix(MATRIX_YELLOW),
+        x.den1_led(MATRIX_YELLOW),
         x.rgb2("#ff0000"),
         x.lcd_two_lines("Huong 1: VANG", "Huong 2: DO"),
     )
     lights_r1_g2 = x.chain(
-        x.den1_matrix(MATRIX_RED),
+        x.den1_led(MATRIX_RED),
         x.rgb2("#00ff00"),
         x.lcd_two_lines("Huong 1: DO", "Huong 2: XANH"),
     )
     lights_r1_y2 = x.chain(
-        x.den1_matrix(MATRIX_RED),
+        x.den1_led(MATRIX_RED),
         x.rgb2("#ffff00"),
         x.lcd_two_lines("Huong 1: DO", "Huong 2: VANG"),
     )
@@ -726,17 +746,19 @@ def build_guide() -> str:
 1. Mở [https://app.ohstem.vn/](https://app.ohstem.vn/) → **Lập trình Yolo:Bit**
 2. **Mở rộng** → cài **AIOT Kit** + **MQTT** trước (chờ báo cài xong)
 3. **Quản lý chương trình** → **Import project** → file JSON bên dưới
-4. Sau import phải thấy khối **Khi bắt đầu / Lặp lại mãi** trên màn hình. Nếu trống:
+4. Nếu workspace trống, thử import **`giao-thong-import-test.json`** trước (chỉ WiFi/MQTT). Nếu file test hiện khối mà file đầy đủ vẫn trống → báo lại.
+5. Sau import phải thấy khối **Khi bắt đầu / Lặp lại mãi** trên màn hình. Nếu trống:
    - Xóa project vừa import → **Ctrl+F5** tải lại trang
    - Cài lại **AIOT Kit** + **MQTT** → Import lại file mới nhất từ GitHub
-5. Sửa WiFi / username IoT:
+6. Sửa WiFi / username IoT:
    - WiFi: `{WIFI_NAME}` / `{WIFI_PASS}`
    - Username Bảng IoT: `{IOT_USERNAME}`
-6. **Chạy** → **Lưu project vào thiết bị**
+7. **Chạy** → **Lưu project vào thiết bị**
 
-Tải trực tiếp từ GitHub (**bắt buộc dùng bản mới — bản cũ trên `main` trước 2026-08-12 bị lỗi trống khối lệnh**):
+Tải trực tiếp từ GitHub:
 
-`https://raw.githubusercontent.com/VuNam1208/Nhung/main/giao-thong-thong-minh.json`
+- Chương trình đầy đủ: `https://raw.githubusercontent.com/VuNam1208/Nhung/main/giao-thong-thong-minh.json`
+- File test import (tối giản): `https://raw.githubusercontent.com/VuNam1208/Nhung/main/giao-thong-import-test.json`
 
 Nếu link trên vẫn trống, thử tải file từ máy tính sau khi `git pull` repo `VuNam1208/Nhung`.
 
@@ -945,14 +967,18 @@ def validate_xml(xml: str) -> None:
     found = set(re.findall(r'type="([^"]+)"', xml))
     required = {
         "yolobit_basic_forever",
-        "yolobit_basic_show_image",
-        "yolobit_basic_create_image",
+        "yolobit_led_set_all",
         "yolobit_basic_clear_display",
         "yolobit_mqtt_check_message",
         "yolobit_basic_sleep",
         "aiot_ultrasonic_create",
     }
-    bad = {"yolobit_display_show_image", "yolobit_display_clear", "yolobit_led_set_all"}
+    bad = {
+        "yolobit_display_show_image",
+        "yolobit_display_clear",
+        "yolobit_basic_show_image",
+        "yolobit_basic_create_image",
+    }
     invalid = found & bad
     if invalid:
         raise SystemExit(f"XML uses invalid block types: {invalid}")
@@ -990,8 +1016,21 @@ def validate_xml(xml: str) -> None:
         raise SystemExit("FOREVER must contain exactly one root block chain")
 
 
+def write_test_project(path: Path) -> None:
+    project = {
+        "mode": "block",
+        "name": "Giao thong import test",
+        "device": "yolobit",
+        "xmlText": build_xml_minimal(),
+        "python": "# Minimal import test\npass\n",
+        "extensions": EXTENSIONS,
+    }
+    path.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def main() -> None:
     write_project(OUTPUT, WIFI_NAME, WIFI_PASS, IOT_USERNAME)
+    write_test_project(OUTPUT_TEST)
 
     GUIDE.write_text(build_guide(), encoding="utf-8")
     BLOCK_GUIDE.write_text(build_block_guide(), encoding="utf-8")
@@ -1000,9 +1039,12 @@ def main() -> None:
     xml = json.loads(OUTPUT.read_text())["xmlText"]
     validate_xml(xml)
     assert "yolobit_basic_forever" in xml
+    assert "yolobit_led_set_all" in xml
+    assert "yolobit_basic_show_image" not in xml
     assert "aiot_ultrasonic_create" in xml
     assert "yolobit_mqtt_check_message" in xml
     print("Created", OUTPUT)
+    print("Created", OUTPUT_TEST)
     print("Created", GUIDE, BLOCK_GUIDE, IOT_GUIDE)
 
 
