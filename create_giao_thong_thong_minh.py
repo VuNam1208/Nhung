@@ -71,13 +71,20 @@ class Xml:
     def field_var(self, var_id: str, name: str) -> str:
         return f'<field name="VAR" id="{var_id}">{name}</field>'
 
-    def text(self, value: str, bid: str | None = None) -> str:
+    def text(self, value: str, bid: str | None = None, shadow: bool = True) -> str:
         bid = bid or self.bid()
         esc = value.replace("&", "&amp;").replace("<", "&lt;")
+        if shadow:
+            return f'<shadow type="text" id="{bid}"><field name="TEXT">{esc}</field></shadow>'
         return f'<block type="text" id="{bid}"><field name="TEXT">{esc}</field></block>'
 
-    def num(self, value: int | str, bid: str | None = None) -> str:
+    def num(self, value: int | str, bid: str | None = None, shadow: bool = True) -> str:
         bid = bid or self.bid()
+        if shadow:
+            return (
+                f'<shadow type="math_number" id="{bid}">'
+                f'<field name="NUM">{value}</field></shadow>'
+            )
         return (
             f'<block type="math_number" id="{bid}">'
             f'<field name="NUM">{value}</field></block>'
@@ -196,7 +203,7 @@ class Xml:
         bid = bid or self.bid()
         return (
             f'<block type="yolobit_basic_sleep" id="{bid}">'
-            f'<value name="duration">{self.num(ms)}</value></block>'
+            f'<value name="duration">{self.num(ms, shadow=True)}</value></block>'
         )
 
     def rgb2(self, colour: str, bid: str | None = None) -> str:
@@ -209,44 +216,26 @@ class Xml:
             f'<field name="COLOUR">{colour}</field></shadow></value></block>'
         )
 
-    def create_image(self, cell_map: dict[str, str]) -> str:
-        bid = self.bid()
-        parts = []
-        for r in range(5):
-            for c in range(5):
-                key = f"{r}{c}"
-                parts.append(f'<field name="{key}">{cell_map.get(key, "#000000")}</field>')
-        return f'<block type="yolobit_basic_create_image" id="{bid}">{"".join(parts)}</block>'
-
-    @staticmethod
-    def _traffic_cells(zone: str, colour: str) -> dict[str, str]:
-        black = "#000000"
-        cells = {f"{r}{c}": black for r in range(5) for c in range(5)}
-        if zone == "red":
-            for r in (0, 1):
-                for c in (1, 2, 3):
-                    cells[f"{r}{c}"] = colour
-            cells["02"] = colour
-        elif zone == "yellow":
-            for c in (1, 2, 3):
-                cells[f"2{c}"] = colour
-        elif zone == "green":
-            for r in (3, 4):
-                for c in (1, 2, 3):
-                    cells[f"{r}{c}"] = colour
-            cells["32"] = colour
-        return cells
-
-    def den1_light(self, zone: str, colour: str) -> str:
-        bid = self.bid()
-        img = self.create_image(self._traffic_cells(zone, colour))
+    def den1_led(self, colour: str, bid: str | None = None) -> str:
+        """Direction 1: Yolo:Bit 5x5 matrix via LED category blocks."""
+        bid = bid or self.bid()
+        sh = self.bid()
         return (
-            f'<block type="yolobit_basic_show_image" id="{bid}">'
-            f'<value name="image">{img}</value></block>'
+            f'<block type="yolobit_led_set_all" id="{bid}">'
+            f'<value name="COLOR"><shadow type="colour_picker" id="{sh}">'
+            f'<field name="COLOUR">{colour}</field></shadow></value></block>'
         )
 
     def display_clear(self) -> str:
         return f'<block type="yolobit_basic_clear_display" id="{self.bid()}"></block>'
+
+    def num_to_text(self, num_xml: str) -> str:
+        join_id = self.bid()
+        return (
+            f'<block type="text_join" id="{join_id}"><mutation items="2"></mutation>'
+            f'<value name="ADD0">{self.text("", shadow=True)}</value>'
+            f'<value name="ADD1">{num_xml}</value></block>'
+        )
 
     def lcd_line(self, text_xml: str, y: int) -> str:
         clear_id = self.bid()
@@ -309,7 +298,7 @@ class Xml:
         b = self.bid()
         return (
             f'<block type="aiot_ultrasonic_checkdistance" id="{b}"><field name="TYPE">CM</field>'
-            f'<value name="DISTANCE">{self.num(cm)}</value></block>'
+            f'<value name="DISTANCE">{self.num(cm, shadow=True)}</value></block>'
         )
 
     def ultrasonic_read_cm(self) -> str:
@@ -356,13 +345,6 @@ class Xml:
         return f'<block type="yolobit_mqtt_check_message" id="{self.bid()}"></block>'
 
 
-# Matrix patterns for direction 1 (Yolo:Bit onboard 5x5)
-IMG1_GREEN = "00000:00000:00900:09990:99999"
-IMG1_YELLOW = "00000:00900:09990:00900:00000"
-IMG1_RED = "90900:99999:99999:00000:00000"
-IMG1_OFF = "00000:00000:00000:00000:00000"
-
-
 def build_python() -> str:
     jam_ticks = JAM_HOLD_MS // LOOP_MS
     return f'''from yolobit import *
@@ -389,11 +371,6 @@ THEM_XANH_MS = {IOT_GREEN_BONUS_MS}
 SERVO_BT = {SERVO_NORMAL}
 SERVO_DAO = {SERVO_REVERSE}
 
-IMG1_X = Image('{IMG1_GREEN}')
-IMG1_V = Image('{IMG1_YELLOW}')
-IMG1_D = Image('{IMG1_RED}')
-IMG1_T = Image('{IMG1_OFF}')
-
 buoc_den = 0
 dem_ket = 0
 dang_ket = 0
@@ -412,13 +389,13 @@ def hien_lcd(d1, d2=''):
 
 def den_huong1(mau):
   if mau == 'X':
-    display.show(IMG1_X)
+    display.set_all('#00ff00')
   elif mau == 'V':
-    display.show(IMG1_V)
+    display.set_all('#ffff00')
   elif mau == 'D':
-    display.show(IMG1_D)
+    display.set_all('#ff0000')
   else:
-    display.show(IMG1_T)
+    display.clear()
 
 def den_huong2(mau):
   if mau == 'X':
@@ -510,7 +487,7 @@ if True:
   them_xanh_1 = 0
   them_xanh_2 = 0
   dao_lan = 0
-  display.show(IMG1_T)
+  display.clear()
   tiny_rgb.show(0, hex_to_rgb('#000000'))
   pin6.servo_write(SERVO_BT)
   hien_lcd('Giao thong OK', 'San sang')
@@ -563,54 +540,41 @@ def build_xml() -> str:
     jam_ticks = JAM_HOLD_MS // LOOP_MS
 
     lights_g1_r2 = x.chain(
-        x.den1_light("green", "#00ff00"),
+        x.den1_led("#00ff00"),
         x.rgb2("#ff0000"),
         x.lcd_two_lines("Huong 1: XANH", "Huong 2: DO"),
     )
     lights_y1_r2 = x.chain(
-        x.den1_light("yellow", "#ffff00"),
+        x.den1_led("#ffff00"),
         x.rgb2("#ff0000"),
         x.lcd_two_lines("Huong 1: VANG", "Huong 2: DO"),
     )
     lights_r1_g2 = x.chain(
-        x.den1_light("red", "#ff0000"),
+        x.den1_led("#ff0000"),
         x.rgb2("#00ff00"),
         x.lcd_two_lines("Huong 1: DO", "Huong 2: XANH"),
     )
     lights_r1_y2 = x.chain(
-        x.den1_light("red", "#ff0000"),
+        x.den1_led("#ff0000"),
         x.rgb2("#ffff00"),
         x.lcd_two_lines("Huong 1: DO", "Huong 2: VANG"),
     )
 
-    phase_cycle = x.stmt_if(
-        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(0)),
-        x.chain(
-            lights_g1_r2,
-            x.sleep_ms(GREEN_MS),
-            x.var_set(v_step, "buoc den", x.num(1)),
-        ),
-        x.stmt_if(
-            x.compare_eq(x.var_get(v_step, "buoc den"), x.num(1)),
-            x.chain(
-                lights_y1_r2,
-                x.sleep_ms(YELLOW_MS),
-                x.var_set(v_step, "buoc den", x.num(2)),
-            ),
-            x.stmt_if(
-                x.compare_eq(x.var_get(v_step, "buoc den"), x.num(2)),
-                x.chain(
-                    lights_r1_g2,
-                    x.sleep_ms(GREEN_MS),
-                    x.var_set(v_step, "buoc den", x.num(3)),
-                ),
-                x.chain(
-                    lights_r1_y2,
-                    x.sleep_ms(YELLOW_MS),
-                    x.var_set(v_step, "buoc den", x.num(0)),
-                ),
-            ),
-        ),
+    phase0 = x.stmt_if(
+        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(0, shadow=False)),
+        x.chain(lights_g1_r2, x.sleep_ms(GREEN_MS), x.var_set(v_step, "buoc den", x.num(1, shadow=False))),
+    )
+    phase1 = x.stmt_if(
+        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(1, shadow=False)),
+        x.chain(lights_y1_r2, x.sleep_ms(YELLOW_MS), x.var_set(v_step, "buoc den", x.num(2, shadow=False))),
+    )
+    phase2 = x.stmt_if(
+        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(2, shadow=False)),
+        x.chain(lights_r1_g2, x.sleep_ms(GREEN_MS), x.var_set(v_step, "buoc den", x.num(3, shadow=False))),
+    )
+    phase3 = x.stmt_if(
+        x.compare_eq(x.var_get(v_step, "buoc den"), x.num(3, shadow=False)),
+        x.chain(lights_r1_y2, x.sleep_ms(YELLOW_MS), x.var_set(v_step, "buoc den", x.num(0, shadow=False))),
     )
 
     jam_detect = x.stmt_if(
@@ -619,17 +583,25 @@ def build_xml() -> str:
             x.increment_var(v_jam_cnt, "dem ket xe"),
             x.stmt_if(
                 x.logic_and(
-                    x.compare_gte(x.var_get(v_jam_cnt, "dem ket xe"), x.num(jam_ticks)),
-                    x.logic_not(x.compare_eq(x.var_get(v_jam, "dang ket xe"), x.num(1))),
+                    x.compare_gte(
+                        x.var_get(v_jam_cnt, "dem ket xe"),
+                        x.num(jam_ticks, shadow=False),
+                    ),
+                    x.logic_not(
+                        x.compare_eq(
+                            x.var_get(v_jam, "dang ket xe"),
+                            x.num(1, shadow=False),
+                        )
+                    ),
                 ),
                 x.chain(
-                    x.var_set(v_jam, "dang ket xe", x.num(1)),
+                    x.var_set(v_jam, "dang ket xe", x.num(1, shadow=False)),
                     x.mqtt_publish(CH_STATUS, x.text("KET XE!")),
                     x.lcd_two_lines("CANH BAO KET XE", "Dung tren IoT"),
                 ),
             ),
         ),
-        x.var_set(v_jam_cnt, "dem ket xe", x.num(0)),
+        x.var_set(v_jam_cnt, "dem ket xe", x.num(0, shadow=False)),
     )
 
     mqtt_callbacks = x.chain(
@@ -673,11 +645,13 @@ def build_xml() -> str:
             CH_LANE_REV,
             v_msg,
             "thong tin",
-            x.stmt_if(
-                x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("1")),
-                x.chain(
-                    x.servo_angle(SERVO_REVERSE),
-                    x.lcd_two_lines("Dao lan ON", "Tang luu thong"),
+            x.chain(
+                x.stmt_if(
+                    x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("1")),
+                    x.chain(
+                        x.servo_angle(SERVO_REVERSE),
+                        x.lcd_two_lines("Dao lan ON", "Tang luu thong"),
+                    ),
                 ),
                 x.stmt_if(
                     x.compare_eq(x.var_get(v_msg, "thong tin"), x.text("0")),
@@ -693,16 +667,20 @@ def build_xml() -> str:
     forever = x.chain(
         x.mqtt_check(),
         jam_detect,
-        x.mqtt_publish(CH_DISTANCE, x.ultrasonic_read_cm()),
-        phase_cycle,
+        x.mqtt_publish(CH_DISTANCE, x.num_to_text(x.ultrasonic_read_cm())),
+        phase0,
+        phase1,
+        phase2,
+        phase3,
+        x.sleep_ms(LOOP_MS),
     )
 
     onstart = x.chain(
-        x.var_set(v_step, "buoc den", x.num(0)),
-        x.var_set(v_jam_cnt, "dem ket xe", x.num(0)),
-        x.var_set(v_jam, "dang ket xe", x.num(0)),
-        x.var_set(v_bonus1, "them xanh 1", x.num(0)),
-        x.var_set(v_bonus2, "them xanh 2", x.num(0)),
+        x.var_set(v_step, "buoc den", x.num(0, shadow=False)),
+        x.var_set(v_jam_cnt, "dem ket xe", x.num(0, shadow=False)),
+        x.var_set(v_jam, "dang ket xe", x.num(0, shadow=False)),
+        x.var_set(v_bonus1, "them xanh 1", x.num(0, shadow=False)),
+        x.var_set(v_bonus2, "them xanh 2", x.num(0, shadow=False)),
         x.display_clear(),
         x.rgb2("#000000"),
         x.servo_angle(SERVO_NORMAL),
@@ -737,15 +715,16 @@ def build_guide() -> str:
 
 ## Tải chương trình
 
-1. Mở [https://app.ohstem.vn/](https://app.ohstem.vn/)
-2. Chọn **Lập trình Yolo:Bit**
-3. **Quản lý chương trình** → **Import project**
-4. Chọn file **`giao-thong-thong-minh.json`**
-5. Cài extension **AIOT Kit** và **MQTT**
-6. Sửa WiFi / username IoT:
+**Quan trọng — làm đúng thứ tự:**
+
+1. Mở [https://app.ohstem.vn/](https://app.ohstem.vn/) → **Lập trình Yolo:Bit**
+2. **Mở rộng** → cài **AIOT Kit** + **MQTT** trước (chờ báo cài xong)
+3. **Quản lý chương trình** → **Import project** → file JSON bên dưới
+4. Nếu màn hình trống: **Ctrl+F5** tải lại trang → Import lại
+5. Sửa WiFi / username IoT:
    - WiFi: `{WIFI_NAME}` / `{WIFI_PASS}`
    - Username Bảng IoT: `{IOT_USERNAME}`
-7. Kết nối Yolo:Bit → **Chạy** → **Lưu project vào thiết bị**
+6. **Chạy** → **Lưu project vào thiết bị**
 
 Tải trực tiếp từ GitHub (nhánh `main`):
 
@@ -922,7 +901,7 @@ def validate_python(py: str) -> None:
         "mqtt.on_receive_message",
         "mqtt.check_message",
         "tiny_rgb.show",
-        "display.show",
+        "display.set_all",
         "pin6.servo_write",
         "KET XE!",
         str(GREEN_MS),
@@ -953,18 +932,18 @@ def write_project(path: Path, wifi: str, passwd: str, iot_user: str) -> None:
 def validate_xml(xml: str) -> None:
     import re
 
-    bad = {"yolobit_display_show_image", "yolobit_display_clear"}
     found = set(re.findall(r'type="([^"]+)"', xml))
+    required = {
+        "yolobit_basic_forever",
+        "yolobit_led_set_all",
+        "yolobit_basic_clear_display",
+        "yolobit_mqtt_check_message",
+        "yolobit_basic_sleep",
+    }
+    bad = {"yolobit_display_show_image", "yolobit_display_clear", "yolobit_basic_create_image"}
     invalid = found & bad
     if invalid:
         raise SystemExit(f"XML uses invalid block types: {invalid}")
-    required = {
-        "yolobit_basic_forever",
-        "yolobit_basic_show_image",
-        "yolobit_basic_create_image",
-        "yolobit_basic_clear_display",
-        "yolobit_mqtt_check_message",
-    }
     missing = required - found
     if missing:
         raise SystemExit(f"XML missing required block types: {missing}")
